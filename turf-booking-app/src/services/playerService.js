@@ -14,21 +14,41 @@ import {
 const COLLECTION = "available_players";
 
 /**
- * Mark the current user as available for `minutes` minutes.
- * Saves their name from Firebase Auth displayName.
+ * Mark the current user as available for a specific time slot.
+ * @param {string} userId
+ * @param {string} startTime - "HH:MM" (24h), e.g. "10:00"
+ * @param {string} endTime   - "HH:MM" (24h), e.g. "12:00"
  */
-export async function setAvailability(userId, minutes = 60) {
+export async function setAvailability(userId, startTime, endTime) {
   const user = auth.currentUser;
-  const availabilityUntil = new Date(Date.now() + minutes * 60 * 1000);
+  const now = new Date();
+
+  // Build Date objects on today's date
+  const [startH, startM] = startTime.split(":").map(Number);
+  const [endH, endM] = endTime.split(":").map(Number);
+
+  const availabilityFrom = new Date(now);
+  availabilityFrom.setHours(startH, startM, 0, 0);
+
+  const availabilityUntil = new Date(now);
+  availabilityUntil.setHours(endH, endM, 0, 0);
+
+  // If the end time has already passed today, push both dates to tomorrow
+  if (availabilityUntil <= now) {
+    availabilityFrom.setDate(availabilityFrom.getDate() + 1);
+    availabilityUntil.setDate(availabilityUntil.getDate() + 1);
+  }
 
   await setDoc(doc(db, COLLECTION, userId), {
     uid: userId,
     full_name: user?.displayName || "Player",
     email: user?.email || "",
+    availability_from: Timestamp.fromDate(availabilityFrom),
     availability_until: Timestamp.fromDate(availabilityUntil),
     updated_at: Timestamp.now(),
   });
 }
+
 
 /**
  * Remove the current user from the available players list.
@@ -38,7 +58,7 @@ export async function removeAvailability(userId) {
 }
 
 /**
- * Fetch all players whose availability hasn't expired yet.
+ * Fetch all players whose availability end time hasn't passed yet.
  */
 export async function getAvailablePlayers() {
   const now = Timestamp.now();
@@ -50,7 +70,7 @@ export async function getAvailablePlayers() {
   return snapshot.docs.map((d) => ({
     id: d.id,
     ...d.data(),
-    // convert Firestore Timestamp → JS Date for the UI
+    availability_from: d.data().availability_from?.toDate?.() ?? null,
     availability_until: d.data().availability_until.toDate(),
   }));
 }

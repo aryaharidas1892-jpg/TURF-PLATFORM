@@ -1,12 +1,24 @@
 // src/services/turfService.js
-// TODO: Replace with Firebase implementation
+import { db } from "../firebase/firebase";
+import {
+  collection,
+  doc,
+  getDocs,
+  getDoc,
+  query,
+  orderBy,
+} from "firebase/firestore";
 
+/** Fetch all approved turfs from Firestore */
 export async function getAllTurfs() {
-  // TODO: Implement with Firebase
-  throw new Error("Not implemented – replace with Firebase");
+  const q = query(collection(db, "turfs"), orderBy("addedAt", "desc"));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
+/** Fetch a single turf by its Firestore document ID */
 export async function getTurfById(id) {
-  // TODO: Implement with Firebase
-  throw new Error("Not implemented – replace with Firebase");
+  const snapshot = await getDoc(doc(db, "turfs", id));
+  if (!snapshot.exists()) throw new Error("Turf not found");
+  return { id: snapshot.id, ...snapshot.data() };
 }

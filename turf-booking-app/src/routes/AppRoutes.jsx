@@ -11,6 +11,9 @@ import BookingHistory from "../pages/BookingHistory";
 import WalletPage from "../pages/WalletPage";
 import PlayersList from "../pages/PlayersList";
 import Profile from "../pages/Profile";
+import AddTurfRequest from "../pages/AddTurfRequest";
+import MyTurfRequests from "../pages/MyTurfRequests";
+import AdminTurfRequests from "../pages/AdminTurfRequests";
 import NotFound from "../pages/NotFound";
 
 export default function AppRoutes() {
@@ -26,6 +29,11 @@ export default function AppRoutes() {
       <Route path="/bookings" element={<ProtectedRoute><BookingHistory /></ProtectedRoute>} />
       <Route path="/wallet" element={<ProtectedRoute><WalletPage /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+      {/* Turf listing */}
+      <Route path="/add-turf" element={<ProtectedRoute><AddTurfRequest /></ProtectedRoute>} />
+      <Route path="/my-turf-requests" element={<ProtectedRoute><MyTurfRequests /></ProtectedRoute>} />
+      {/* Admin — unlinked, developer-only URL */}
+      <Route path="/admin/turf-requests" element={<AdminTurfRequests />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
