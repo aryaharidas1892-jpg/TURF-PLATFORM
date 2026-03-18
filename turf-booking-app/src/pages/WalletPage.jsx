@@ -1,5 +1,5 @@
 // src/pages/WalletPage.jsx
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useWallet } from "../hooks/useWallet";
 import { topUpWallet } from "../services/walletService";
@@ -15,17 +15,70 @@ export default function WalletPage() {
   const [topUp, setTopUp] = useState("");
   const [topping, setTopping] = useState(false);
 
+  // Dynamically load Razorpay SDK
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    document.body.appendChild(script);
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
+
   async function handleTopUp(amount) {
-    setTopping(true);
-    try {
-      await topUpWallet(currentUser.uid, amount);
-      await refetch();
-      alert(`₹${amount} added to your wallet!`);
-    } catch (err) {
-      alert("Top-up failed: " + err.message);
+    if (amount <= 0) return;
+    
+    if (!window.Razorpay) {
+      alert("Razorpay SDK failed to load. Are you online?");
+      return;
     }
-    setTopping(false);
-    setTopUp("");
+
+    setTopping(true);
+
+    const keyId = import.meta.env.VITE_RAZORPAY_KEY_ID;
+    if (!keyId) {
+      alert("Razorpay API key is missing from environment variables.");
+      setTopping(false);
+      return;
+    }
+
+    const options = {
+      key: keyId,
+      amount: amount * 100, // paise => INR
+      currency: "INR",
+      name: "TurfBook Wallet",
+      description: "Wallet Top-up",
+      handler: async function (response) {
+        // Payment successful callback
+        try {
+          await topUpWallet(currentUser.uid, amount);
+          await refetch();
+          alert(`₹${amount} added to your wallet successfully!`);
+        } catch (err) {
+          alert("Top-up failed to record in database: " + err.message);
+        }
+        setTopping(false);
+        setTopUp("");
+      },
+      prefill: {
+        name: currentUser.displayName || "User",
+        email: currentUser.email || "",
+      },
+      theme: { color: "#16a34a" },
+      modal: {
+        ondismiss: function () {
+          setTopping(false);
+        },
+      },
+    };
+
+    const rzp = new window.Razorpay(options);
+    rzp.on("payment.failed", function (response) {
+      alert("Payment failed: " + response.error.description);
+      setTopping(false);
+    });
+    rzp.open();
   }
 
   if (loading) return <LoadingSpinner text="Loading wallet..." />;

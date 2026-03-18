@@ -81,7 +81,7 @@ export async function approveRequest(requestId, requestData) {
     const turfDoc = {
         name: requestData.turfName,
         description: requestData.description,
-        pricePerHour: Number(requestData.pricePerHour),
+        price_per_slot: Number(requestData.pricePerHour), // Fixed: matched property name required by UI
         address: requestData.address,
         city: requestData.city,
         location: `${requestData.address}, ${requestData.city}`,
@@ -90,7 +90,7 @@ export async function approveRequest(requestId, requestData) {
         closingTime: requestData.closingTime,
         sports: requestData.sports || [],
         amenities: requestData.amenities || [],
-        imageUrl: requestData.imageUrl || "",
+        imageUrl: requestData.image_url || requestData.imageUrl || "",
         ownerName: requestData.ownerName,
         ownerPhone: requestData.ownerPhone,
         ownerEmail: requestData.ownerEmail,

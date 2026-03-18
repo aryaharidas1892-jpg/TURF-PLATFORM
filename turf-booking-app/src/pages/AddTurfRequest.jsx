@@ -3,6 +3,8 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { submitTurfRequest } from "../services/turfRequestService";
+import { storage } from "../firebase/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 const SPORTS_LIST = ["Football", "Cricket", "Basketball", "Badminton", "Tennis", "Volleyball", "Hockey", "Kabaddi"];
 const AMENITIES_LIST = ["Parking", "Changing Rooms", "Floodlights", "Washrooms", "Drinking Water", "Cafeteria", "First Aid", "CCTV Security"];
@@ -13,7 +15,7 @@ const INITIAL = {
     address: "", city: "", mapsLink: "",
     openingTime: "06:00", closingTime: "22:00",
     sports: [], amenities: [],
-    imageUrl: "",
+    imageFile: null, imageUrl: "", // store file locally, url generated on submit
     ownerName: "", ownerPhone: "", ownerEmail: "",
 };
 
@@ -21,7 +23,7 @@ function toggle(arr, val) {
     return arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val];
 }
 
-export default function AddTurfRequest() {
+export default function AddTurfRequest({ embeddedMode = false }) {
     const { currentUser } = useAuth();
     const navigate = useNavigate();
     const [form, setForm] = useState(INITIAL);
@@ -41,6 +43,7 @@ export default function AddTurfRequest() {
         }
         if (form.sports.length === 0) { setError("Select at least one sport."); return false; }
         if (form.amenities.length === 0) { setError("Select at least one amenity."); return false; }
+        if (!form.imageFile) { setError("Please upload a turf image."); return false; }
         if (isNaN(Number(form.pricePerHour)) || Number(form.pricePerHour) <= 0) {
             setError("Enter a valid price per hour."); return false;
         }
@@ -55,7 +58,19 @@ export default function AddTurfRequest() {
         if (!validate()) return;
         setSubmitting(true);
         try {
-            await submitTurfRequest(currentUser, form);
+            // 1. Upload image to Firebase Storage
+            const ext = form.imageFile.name.split(".").pop();
+            const fileName = `turf_${Date.now()}.${ext}`;
+            const imageRef = ref(storage, `turf_images/${fileName}`);
+
+            await uploadBytes(imageRef, form.imageFile);
+            const downloadUrl = await getDownloadURL(imageRef);
+
+            // 2. Submit the turf request with the new image URL
+            const submissionData = { ...form, imageUrl: downloadUrl };
+            delete submissionData.imageFile; // not needed in Firestore
+
+            await submitTurfRequest(currentUser, submissionData);
             setSubmitted(true);
         } catch (err) {
             setError("Failed to submit: " + err.message);
@@ -64,28 +79,30 @@ export default function AddTurfRequest() {
     }
 
     if (submitted) {
-        return (
-            <div className="page-container">
-                <div className="atr-success">
-                    <div className="atr-success-icon">🏟️</div>
-                    <h2>Request Submitted!</h2>
-                    <p>Thank you! Our team will review your turf listing and get back to you. This usually takes 1–3 business days.</p>
+        const inner = (
+            <div className="atr-success">
+                <div className="atr-success-icon">🏟️</div>
+                <h2>Request Submitted!</h2>
+                <p>Thank you! Our team will review your turf listing and get back to you. This usually takes 1–3 business days.</p>
+                {!embeddedMode && (
                     <div className="atr-success-actions">
                         <Link to="/my-turf-requests" className="btn-primary">View My Requests</Link>
                         <Link to="/" className="btn-outline">Go Home</Link>
                     </div>
-                </div>
+                )}
             </div>
         );
+        return embeddedMode ? inner : <div className="page-container">{inner}</div>;
     }
 
-    return (
-        <div className="page-container">
-            <div className="page-header">
-                <h1>List Your Turf 🏟️</h1>
-                <p>Fill in the details below — our team will review and add your turf to the platform.</p>
-            </div>
-
+    const content = (
+        <>
+            {!embeddedMode && (
+                <div className="page-header">
+                    <h1>List Your Turf 🏟️</h1>
+                    <p>Fill in the details below — our team will review and add your turf to the platform.</p>
+                </div>
+            )}
             <form className="atr-form" onSubmit={handleSubmit} noValidate>
 
                 {/* Basic Info */}
@@ -174,11 +191,24 @@ export default function AddTurfRequest() {
                 <div className="atr-section">
                     <h2 className="atr-section-title">📸 Turf Image</h2>
                     <div className="form-group">
-                        <label>Image URL * <span className="optional-label">(use Imgur, Cloudinary or any public link)</span></label>
-                        <input type="url" placeholder="https://..." value={form.imageUrl} onChange={(e) => set("imageUrl", e.target.value)} />
+                        <label>Upload Image * <span className="optional-label">(JPEG, PNG, or WebP)</span></label>
+                        <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                    set("imageFile", file);
+                                    set("imageUrl", URL.createObjectURL(file)); // for preview
+                                }
+                            }}
+                        />
                     </div>
                     {form.imageUrl && (
-                        <img src={form.imageUrl} alt="Turf preview" className="atr-img-preview" onError={(e) => e.target.style.display = "none"} />
+                        <div style={{ marginTop: 12 }}>
+                            <p style={{ fontSize: "0.85rem", color: "var(--gray-500)", marginBottom: 4 }}>Image Preview:</p>
+                            <img src={form.imageUrl} alt="Turf preview" className="atr-img-preview" />
+                        </div>
                     )}
                 </div>
 
@@ -212,6 +242,8 @@ export default function AddTurfRequest() {
                     {submitting ? "Submitting Request…" : "Submit Turf Listing Request →"}
                 </button>
             </form>
-        </div>
+        </>
     );
+
+    return embeddedMode ? content : <div className="page-container">{content}</div>;
 }

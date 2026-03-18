@@ -1,6 +1,6 @@
 // src/services/reportService.js
 import { db } from "../firebase/firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, serverTimestamp, doc, updateDoc, onSnapshot, query, orderBy } from "firebase/firestore";
 
 /**
  * Predefined report reasons shown to the user in the report modal.
@@ -46,4 +46,27 @@ export async function submitReport(reporter, reported, reason, details = "") {
         status: "pending", // pending | reviewed | dismissed
         createdAt: serverTimestamp(),
     });
+}
+
+/** Admin: Listen to all user reports */
+export function subscribeToAllReports(callback, onError) {
+    const q = query(collection(db, "reports"), orderBy("createdAt", "desc"));
+    return onSnapshot(
+        q,
+        (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+        (err) => { if (onError) onError(err); }
+    );
+}
+
+/** Admin: Block the reported user and mark report as reviewed */
+export async function blockUser(reportId, uid) {
+    // 1. Mark user as blocked
+    await updateDoc(doc(db, "users", uid), { isBlocked: true });
+    // 2. Update report status
+    await updateDoc(doc(db, "reports", reportId), { status: "reviewed" });
+}
+
+/** Admin: Dismiss the report without blocking */
+export async function dismissReport(reportId) {
+    await updateDoc(doc(db, "reports", reportId), { status: "dismissed" });
 }

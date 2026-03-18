@@ -7,7 +7,7 @@ export default function TurfCard({ turf }) {
   return (
     <div className="turf-card">
       <img
-        src={turf.image_url || "https://placehold.co/400x200/16a34a/white?text=Turf"}
+        src={turf.image_url || turf.imageUrl || "https://placehold.co/400x200/16a34a/white?text=Turf"}
         alt={turf.name}
         className="turf-card-img"
       />

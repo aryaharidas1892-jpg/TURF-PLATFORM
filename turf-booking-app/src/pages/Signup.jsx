@@ -44,29 +44,35 @@ export default function Signup() {
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="form-group">
             <label>Full Name</label>
-            <input name="fullName" placeholder="Rahul Kumar" value={form.fullName}
-              onChange={handleChange} required />
+            <input name="fullName" placeholder="Rahul Kumar" value={form.fullName} onChange={handleChange} required />
           </div>
           <div className="form-group">
             <label>Email</label>
-            <input name="email" type="email" placeholder="you@email.com" value={form.email}
-              onChange={handleChange} required />
+            <input name="email" type="email" placeholder="you@email.com" value={form.email} onChange={handleChange} required />
           </div>
           <div className="form-group">
             <label>Password</label>
-            <input name="password" type="password" placeholder="Min. 6 characters" value={form.password}
-              onChange={handleChange} required />
+            <input name="password" type="password" placeholder="Min. 6 characters" value={form.password} onChange={handleChange} required />
           </div>
           <div className="form-group">
             <label>Confirm Password</label>
-            <input name="confirm" type="password" placeholder="Repeat password" value={form.confirm}
-              onChange={handleChange} required />
+            <input name="confirm" type="password" placeholder="Repeat password" value={form.confirm} onChange={handleChange} required />
           </div>
           <button type="submit" className="btn-primary w-full" disabled={loading}>
             {loading ? "Creating account..." : "Create Account"}
           </button>
         </form>
         <p className="auth-footer">Already have an account? <Link to="/login">Login here</Link></p>
+
+        {/* Owner signup CTA */}
+        <div className="owner-signup-cta">
+          <span>🏟️</span>
+          <div>
+            <strong>Own a turf?</strong>
+            <p>Register as an owner to list and manage your turfs.</p>
+          </div>
+          <Link to="/owner-signup" className="btn-outline-sm">Register →</Link>
+        </div>
       </div>
     </div>
   );

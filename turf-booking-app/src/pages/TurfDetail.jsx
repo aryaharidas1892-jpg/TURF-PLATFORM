@@ -31,7 +31,7 @@ export default function TurfDetail() {
     <div className="page-container">
       <BackButton fallback="/turfs" />
       <img
-        src={turf.image_url || "https://placehold.co/800x300/16a34a/white?text=Turf"}
+        src={turf.image_url || turf.imageUrl || "https://placehold.co/800x300/16a34a/white?text=Turf"}
         alt={turf.name}
         className="turf-detail-img"
       />
