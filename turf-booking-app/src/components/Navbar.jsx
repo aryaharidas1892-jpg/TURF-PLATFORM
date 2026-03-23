@@ -2,8 +2,6 @@
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
-const ADMIN_UID = import.meta.env.VITE_ADMIN_UID;
-
 export default function Navbar() {
   const { currentUser, userRole, logout } = useAuth();
   const navigate = useNavigate();
@@ -14,58 +12,65 @@ export default function Navbar() {
     navigate("/");
   }
 
-  // Owner has their own sidebar on the dashboard — hide top navbar there
+  // Owner has their own sidebar on the dashboard
   if (userRole === "owner" && location.pathname.startsWith("/owner/dashboard")) return null;
 
   return (
-    <nav className="navbar">
-      <Link to="/" className="navbar-brand">⚽ TurfBook</Link>
-      <div className="navbar-links">
-        {/* Admin view */}
-        {userRole === "admin" && (
-          <>
-            <Link to="/turfs">Browse Turfs</Link>
-            <Link to="/admin/turf-requests" className="navbar-admin-link">🛠️ Admin Panel</Link>
-            <button onClick={handleLogout} className="btn-outline-sm">Logout</button>
-          </>
-        )}
+    <nav className="navbar-v2">
+      <div className="navbar-v2-inner">
+        <Link to="/" className="navbar-v2-brand">
+          <span className="navbar-v2-logo">⚽</span>
+          <span>TurfBook</span>
+        </Link>
 
-        {/* Regular user view */}
-        {(userRole === "user" || !currentUser) && (
-          <>
-            <Link to="/turfs">Browse Turfs</Link>
-            <Link to="/players">Players</Link>
-            {currentUser ? (
-              <>
-                <Link to="/bookings">My Bookings</Link>
-                <Link to="/wallet">Wallet</Link>
-                <Link to="/profile">Profile</Link>
-                <button onClick={handleLogout} className="btn-outline-sm">Logout</button>
-              </>
-            ) : (
-              <>
-                <Link to="/login" className="btn-outline-sm">Login</Link>
-                <Link to="/signup" className="btn-primary-sm">Sign Up</Link>
-              </>
-            )}
-          </>
-        )}
+        <div className="navbar-v2-links">
+          {/* Admin */}
+          {userRole === "admin" && (
+            <>
+              <Link to="/turfs" className="nav-link">Browse Turfs</Link>
+              <Link to="/admin/turf-requests" className="nav-link nav-link-admin">🛠️ Admin Panel</Link>
+              <button onClick={handleLogout} className="nav-btn-outline">Logout</button>
+            </>
+          )}
 
-        {/* Owner pending — minimal navbar */}
-        {userRole === "owner_pending" && (
-          <>
-            <span style={{ fontSize: "0.85rem", color: "var(--gray-400)" }}>🕐 Pending Approval</span>
-            <button onClick={handleLogout} className="btn-outline-sm">Logout</button>
-          </>
-        )}
+          {/* Regular user or guest */}
+          {(userRole === "user" || !currentUser) && (
+            <>
+              <Link to="/turfs" className="nav-link">Browse Turfs</Link>
+              <Link to="/players" className="nav-link">Players</Link>
+              {currentUser ? (
+                <>
+                  <Link to="/bookings" className="nav-link">My Bookings</Link>
+                  <Link to="/wallet" className="nav-link">Wallet</Link>
+                  <Link to="/profile" className="nav-link">Profile</Link>
+                  <button onClick={handleLogout} className="nav-btn-outline">Logout</button>
+                </>
+              ) : (
+                <>
+                  <Link to="/login" className="nav-btn-outline">Login</Link>
+                  <Link to="/signup" className="nav-btn-primary">Sign Up</Link>
+                </>
+              )}
+            </>
+          )}
 
-        {/* Owner view (when not on dashboard) */}
-        {userRole === "owner" && (
-          <>
-            <Link to="/owner/dashboard" className="btn-primary-sm">Dashboard</Link>
-            <button onClick={handleLogout} className="btn-outline-sm">Logout</button>
-          </>
-        )}
+          {/* Owner pending */}
+          {userRole === "owner_pending" && (
+            <>
+              <span className="nav-pending-badge">🕐 Pending Approval</span>
+              <button onClick={handleLogout} className="nav-btn-outline">Logout</button>
+            </>
+          )}
+
+          {/* Owner — outside dashboard */}
+          {userRole === "owner" && (
+            <>
+              <Link to="/turfs" className="nav-link">Browse Turfs</Link>
+              <Link to="/owner/dashboard" className="nav-btn-primary">Dashboard</Link>
+              <button onClick={handleLogout} className="nav-btn-outline">Logout</button>
+            </>
+          )}
+        </div>
       </div>
     </nav>
   );

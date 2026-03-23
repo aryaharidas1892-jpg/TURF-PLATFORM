@@ -6,7 +6,11 @@ import LoadingSpinner from "../components/LoadingSpinner";
 import ChatModal from "../components/ChatModal";
 import ChatInbox from "../components/ChatInbox";
 import ReportModal from "../components/ReportModal";
-import { AVAILABILITY_OPTIONS } from "../utils/constants";
+
+const SPORTS_LIST = [
+  "Cricket", "Football", "Hockey", "Basketball",
+  "Badminton", "Tennis", "Volleyball", "Kabaddi",
+];
 
 /** Generate half-hour time options from 05:00 to 23:30 */
 function generateTimeOptions() {
@@ -27,14 +31,11 @@ function generateTimeOptions() {
 
 const TIME_OPTIONS = generateTimeOptions();
 
-/** Default start = next upcoming 30-min mark, end = 1 hour later.
- *  If near midnight, defaults to 05:00–06:00 (tomorrow handled by playerService). */
 function getDefaultTimes() {
   const now = new Date();
-  // Round up to next 30-min boundary
   const totalMins = now.getHours() * 60 + now.getMinutes();
   const nextSlotMins = Math.ceil((totalMins + 1) / 30) * 30;
-  const startMins = nextSlotMins % (24 * 60); // wrap within 24h
+  const startMins = nextSlotMins % (24 * 60);
   const endMins = (startMins + 60) % (24 * 60);
 
   const fmt = (totalM) => {
@@ -43,14 +44,12 @@ function getDefaultTimes() {
     return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
   };
 
-  // If start/end fall in the early hours (0–4) or end would be ≤ start string, use safe morning defaults
   const startH = Math.floor(startMins / 60);
   if (startH < 5 || startH >= 23) {
     return { startTime: "05:00", endTime: "06:00" };
   }
   return { startTime: fmt(startMins), endTime: fmt(endMins) };
 }
-
 
 export default function PlayersList() {
   const { currentUser } = useAuth();
@@ -60,17 +59,26 @@ export default function PlayersList() {
   const [isAvailable, setIsAvailable] = useState(false);
   const [chatTarget, setChatTarget] = useState(null);
   const [reportTarget, setReportTarget] = useState(null);
+  const [sportFilter, setSportFilter] = useState("All");
 
+  // Availability form state
   const defaults = getDefaultTimes();
   const [startTime, setStartTime] = useState(defaults.startTime);
   const [endTime, setEndTime] = useState(defaults.endTime);
   const [timeError, setTimeError] = useState("");
+  const [selectedSports, setSelectedSports] = useState([]);
 
   const fetchPlayers = () => {
     getAvailablePlayers().then(setPlayers).finally(() => setLoading(false));
   };
 
   useEffect(() => { fetchPlayers(); }, []);
+
+  function toggleSport(sport) {
+    setSelectedSports((prev) =>
+      prev.includes(sport) ? prev.filter((s) => s !== sport) : [...prev, sport]
+    );
+  }
 
   function validateTimes() {
     if (startTime >= endTime) {
@@ -89,8 +97,9 @@ export default function PlayersList() {
       if (isAvailable) {
         await removeAvailability(currentUser.uid);
         setIsAvailable(false);
+        setSelectedSports([]);
       } else {
-        await setAvailability(currentUser.uid, startTime, endTime);
+        await setAvailability(currentUser.uid, startTime, endTime, selectedSports);
         setIsAvailable(true);
       }
       fetchPlayers();
@@ -104,6 +113,12 @@ export default function PlayersList() {
     if (!date) return "";
     return new Date(date).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
   }
+
+  // Filter players by selected sport
+  const filteredPlayers =
+    sportFilter === "All"
+      ? players
+      : players.filter((p) => (p.sports || []).includes(sportFilter));
 
   if (loading) return <LoadingSpinner text="Finding players..." />;
 
@@ -123,25 +138,47 @@ export default function PlayersList() {
           </div>
           <div className="toggle-controls-col">
             {!isAvailable && (
-              <div className="timeslot-picker">
-                <div className="timeslot-field">
-                  <label>From</label>
-                  <select value={startTime} onChange={(e) => { setStartTime(e.target.value); setTimeError(""); }}>
-                    {TIME_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
+              <>
+                {/* Time picker */}
+                <div className="timeslot-picker">
+                  <div className="timeslot-field">
+                    <label>From</label>
+                    <select value={startTime} onChange={(e) => { setStartTime(e.target.value); setTimeError(""); }}>
+                      {TIME_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <span className="timeslot-arrow">→</span>
+                  <div className="timeslot-field">
+                    <label>To</label>
+                    <select value={endTime} onChange={(e) => { setEndTime(e.target.value); setTimeError(""); }}>
+                      {TIME_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <span className="timeslot-arrow">→</span>
-                <div className="timeslot-field">
-                  <label>To</label>
-                  <select value={endTime} onChange={(e) => { setEndTime(e.target.value); setTimeError(""); }}>
-                    {TIME_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
+
+                {/* Sports selector (optional) */}
+                <div className="sports-select-section">
+                  <label className="sports-select-label">
+                    ⚽ Sports you want to play <span className="optional-label">(optional)</span>
+                  </label>
+                  <div className="sports-chips-row">
+                    {SPORTS_LIST.map((sport) => (
+                      <button
+                        key={sport}
+                        type="button"
+                        className={`sport-chip-btn ${selectedSports.includes(sport) ? "active" : ""}`}
+                        onClick={() => toggleSport(sport)}
+                      >
+                        {sport}
+                      </button>
                     ))}
-                  </select>
+                  </div>
                 </div>
-              </div>
+              </>
             )}
             {timeError && <p className="timeslot-error">{timeError}</p>}
             <button
@@ -160,14 +197,30 @@ export default function PlayersList() {
         <ChatInbox currentUser={currentUser} onOpenChat={(player) => setChatTarget(player)} />
       )}
 
+      {/* Sport filter */}
+      <div className="sport-filter-row">
+        <span className="sport-filter-label">Filter by sport:</span>
+        {["All", ...SPORTS_LIST].map((sport) => (
+          <button
+            key={sport}
+            className={`sport-filter-btn ${sportFilter === sport ? "active" : ""}`}
+            onClick={() => setSportFilter(sport)}
+          >
+            {sport}
+          </button>
+        ))}
+      </div>
+
       {/* Players list */}
       <div className="players-section">
-        <h3>Currently Available ({players.length})</h3>
-        {players.length === 0 ? (
-          <div className="empty-state"><p>🏃 No players available right now. Be the first!</p></div>
+        <h3>Currently Available ({filteredPlayers.length})</h3>
+        {filteredPlayers.length === 0 ? (
+          <div className="empty-state">
+            <p>🏃 No players available{sportFilter !== "All" ? ` for ${sportFilter}` : ""} right now. Be the first!</p>
+          </div>
         ) : (
           <div className="players-grid">
-            {players.map((p) => (
+            {filteredPlayers.map((p) => (
               <div key={p.id} className="player-card">
                 <div className="player-avatar">{p.full_name?.[0]?.toUpperCase() || "?"}</div>
                 <div className="player-info">
@@ -177,6 +230,14 @@ export default function PlayersList() {
                       ? `${fmtTime(p.availability_from)} – ${fmtTime(p.availability_until)}`
                       : `Until ${fmtTime(p.availability_until)}`}
                   </small>
+                  {/* Sports badges */}
+                  {p.sports && p.sports.length > 0 && (
+                    <div className="player-sports-badges">
+                      {p.sports.map((s) => (
+                        <span key={s} className="player-sport-badge">{s}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="player-card-actions">
                   <span className="available-dot">●</span>

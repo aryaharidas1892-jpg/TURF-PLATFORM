@@ -16,40 +16,89 @@ import {
 } from "firebase/firestore";
 import { creditWallet } from "./walletService";
 
-export async function createBooking({ userId, turfId, slotId, turfName, dateStr, startTime, endTime, amount, paymentId }) {
+export async function createBooking({ userId, turfId, slotId, turfName, date, dateStr, startTime, endTime, amount, paymentId, groupId }) {
   const bookingRef = collection(db, "bookings");
-  const slotRef = doc(db, "slots", slotId); // assuming we have a slots collection too, wait...
 
-  // Wait, if slots are dynamic, we just save the booking and query it later to block the slot!
+  // Accept either `date` or `dateStr` for backward-compatibility
+  const bookingDate = date || dateStr;
+  if (!bookingDate) throw new Error("Booking date is required.");
+
   const newBooking = {
     userId,
     turfId,
-    turfName,
-    date: dateStr, // "YYYY-MM-DD"
+    turfName: turfName || "",
+    date: bookingDate,
     startTime,
     endTime,
     amount,
     paymentId: paymentId || null,
+    groupId: groupId || null,       // links multi-slot bookings
     status: "confirmed",
     createdAt: serverTimestamp(),
   };
 
   const docRef = await addDoc(bookingRef, newBooking);
-  return docRef.id;
+  return { id: docRef.id, ...newBooking };
 }
 
+/** Book multiple consecutive slots in one transaction */
+export async function createMultiSlotBooking({ userId, turfId, turfName, date, slots, pricePerSlot, paymentId }) {
+  const groupId = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const bookingRef = collection(db, "bookings");
+
+  const bookings = [];
+  for (const slot of slots) {
+    const newBooking = {
+      userId,
+      turfId,
+      turfName: turfName || "",
+      date,
+      startTime: slot.start_time,
+      endTime: slot.end_time,
+      amount: pricePerSlot,
+      paymentId: paymentId || null,
+      groupId,
+      status: "confirmed",
+      createdAt: serverTimestamp(),
+    };
+    const docRef = await addDoc(bookingRef, newBooking);
+    bookings.push({ id: docRef.id, ...newBooking });
+  }
+  return { groupId, bookings, totalAmount: pricePerSlot * slots.length };
+}
+
+
 export async function getUserBookings(userId) {
+  // No orderBy — avoids composite index requirement.
+  // Sort client-side instead.
   const q = query(
     collection(db, "bookings"),
-    where("userId", "==", userId),
-    orderBy("date", "desc")
+    where("userId", "==", userId)
   );
-  
+
   const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({
-    id: doc.id,
-    ...doc.data()
-  }));
+  const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+
+  const bookings = snapshot.docs.map((d) => {
+    const data = d.data();
+    // Compute a display status based on Firestore `status` field and date
+    let booking_status;
+    if (data.status === "cancelled") {
+      booking_status = "cancelled";
+    } else if (data.date && data.date >= today) {
+      booking_status = "upcoming";
+    } else {
+      booking_status = "completed";
+    }
+    return { id: d.id, ...data, booking_status };
+  });
+
+  // Sort: upcoming first (ascending date), then past (descending)
+  return bookings.sort((a, b) => {
+    if (a.booking_status === "upcoming" && b.booking_status !== "upcoming") return -1;
+    if (b.booking_status === "upcoming" && a.booking_status !== "upcoming") return 1;
+    return (b.date || "").localeCompare(a.date || "");
+  });
 }
 
 export async function cancelBooking(bookingId, userId) {
@@ -61,17 +110,19 @@ export async function cancelBooking(bookingId, userId) {
   if (data.userId !== userId) throw new Error("Unauthorized");
   if (data.status === "cancelled") throw new Error("Already cancelled");
 
-  // simplified refund logic for now
   await updateDoc(bookingRef, { status: "cancelled", cancelledAt: serverTimestamp() });
-  
+
+  let refundAmount = 0;
   if (data.amount > 0) {
+    refundAmount = data.amount;
     await creditWallet({
       userId,
       amount: data.amount,
       bookingId,
-      description: `Refund for Booking: ${data.turfName}`
+      description: `Refund for Booking: ${data.turfName || "Turf"}`
     });
   }
+  return { refundAmount };
 }
 
 /** Real-time listener for all confirmed bookings for a specific turf (used by Owner Dashboard) */

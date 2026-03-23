@@ -15,12 +15,21 @@ const INITIAL = {
     address: "", city: "", mapsLink: "",
     openingTime: "06:00", closingTime: "22:00",
     sports: [], amenities: [],
-    imageFile: null, imageUrl: "", // store file locally, url generated on submit
+    imageFile: null, imageUrl: "",
     ownerName: "", ownerPhone: "", ownerEmail: "",
 };
 
 function toggle(arr, val) {
     return arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val];
+}
+
+/** Upload with a 15-second timeout to prevent infinite hang */
+async function uploadWithTimeout(imageRef, file, timeoutMs = 15000) {
+    const uploadPromise = uploadBytes(imageRef, file).then(() => getDownloadURL(imageRef));
+    const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Image upload timed out. Check Firebase Storage rules.")), timeoutMs)
+    );
+    return Promise.race([uploadPromise, timeoutPromise]);
 }
 
 export default function AddTurfRequest({ embeddedMode = false }) {
@@ -30,11 +39,12 @@ export default function AddTurfRequest({ embeddedMode = false }) {
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted] = useState(false);
     const [error, setError] = useState("");
+    const [uploadStatus, setUploadStatus] = useState(""); // progress text
 
     const set = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
     function validate() {
-        const required = ["turfName", "description", "pricePerHour", "address", "city", "openingTime", "closingTime", "imageUrl", "ownerName", "ownerPhone", "ownerEmail"];
+        const required = ["turfName", "description", "pricePerHour", "address", "city", "openingTime", "closingTime", "ownerName", "ownerPhone", "ownerEmail"];
         for (const k of required) {
             if (!form[k]?.toString().trim()) {
                 setError(`Please fill in: ${k.replace(/([A-Z])/g, " $1")}`);
@@ -43,7 +53,6 @@ export default function AddTurfRequest({ embeddedMode = false }) {
         }
         if (form.sports.length === 0) { setError("Select at least one sport."); return false; }
         if (form.amenities.length === 0) { setError("Select at least one amenity."); return false; }
-        if (!form.imageFile) { setError("Please upload a turf image."); return false; }
         if (isNaN(Number(form.pricePerHour)) || Number(form.pricePerHour) <= 0) {
             setError("Enter a valid price per hour."); return false;
         }
@@ -57,25 +66,36 @@ export default function AddTurfRequest({ embeddedMode = false }) {
         e.preventDefault();
         if (!validate()) return;
         setSubmitting(true);
+        setUploadStatus("");
         try {
-            // 1. Upload image to Firebase Storage
-            const ext = form.imageFile.name.split(".").pop();
-            const fileName = `turf_${Date.now()}.${ext}`;
-            const imageRef = ref(storage, `turf_images/${fileName}`);
+            let imageUrl = "";
 
-            await uploadBytes(imageRef, form.imageFile);
-            const downloadUrl = await getDownloadURL(imageRef);
+            // Upload image only if one was selected
+            if (form.imageFile) {
+                setUploadStatus("Uploading image…");
+                try {
+                    const ext = form.imageFile.name.split(".").pop();
+                    const fileName = `turf_${Date.now()}.${ext}`;
+                    const imageRef = ref(storage, `turf_images/${fileName}`);
+                    imageUrl = await uploadWithTimeout(imageRef, form.imageFile);
+                } catch (uploadErr) {
+                    // Don't block submission if image upload fails
+                    console.warn("Image upload failed:", uploadErr.message);
+                    setUploadStatus("⚠️ Image upload failed — submitting without image.");
+                    imageUrl = "";
+                }
+            }
 
-            // 2. Submit the turf request with the new image URL
-            const submissionData = { ...form, imageUrl: downloadUrl };
-            delete submissionData.imageFile; // not needed in Firestore
-
-            await submitTurfRequest(currentUser, submissionData);
+            setUploadStatus("Submitting request…");
+            const { imageFile, ...restForm } = form;
+            await submitTurfRequest(currentUser, { ...restForm, imageUrl });
             setSubmitted(true);
         } catch (err) {
             setError("Failed to submit: " + err.message);
+        } finally {
+            setSubmitting(false);
+            setUploadStatus("");
         }
-        setSubmitting(false);
     }
 
     if (submitted) {
@@ -187,11 +207,11 @@ export default function AddTurfRequest({ embeddedMode = false }) {
                     </div>
                 </div>
 
-                {/* Media */}
+                {/* Media — OPTIONAL */}
                 <div className="atr-section">
-                    <h2 className="atr-section-title">📸 Turf Image</h2>
+                    <h2 className="atr-section-title">📸 Turf Image <span className="optional-label">(optional)</span></h2>
                     <div className="form-group">
-                        <label>Upload Image * <span className="optional-label">(JPEG, PNG, or WebP)</span></label>
+                        <label>Upload Image <span className="optional-label">(JPEG, PNG, or WebP — skip if upload fails)</span></label>
                         <input
                             type="file"
                             accept="image/*"
@@ -199,14 +219,14 @@ export default function AddTurfRequest({ embeddedMode = false }) {
                                 const file = e.target.files[0];
                                 if (file) {
                                     set("imageFile", file);
-                                    set("imageUrl", URL.createObjectURL(file)); // for preview
+                                    set("imageUrl", URL.createObjectURL(file));
                                 }
                             }}
                         />
                     </div>
                     {form.imageUrl && (
                         <div style={{ marginTop: 12 }}>
-                            <p style={{ fontSize: "0.85rem", color: "var(--gray-500)", marginBottom: 4 }}>Image Preview:</p>
+                            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: 4 }}>Image Preview:</p>
                             <img src={form.imageUrl} alt="Turf preview" className="atr-img-preview" />
                         </div>
                     )}
@@ -232,6 +252,7 @@ export default function AddTurfRequest({ embeddedMode = false }) {
                 </div>
 
                 {error && <div className="alert alert-error">⚠️ {error}</div>}
+                {uploadStatus && <div className="alert alert-info">⏳ {uploadStatus}</div>}
 
                 <div className="atr-disclaimer">
                     <span>🔒</span>
@@ -239,7 +260,7 @@ export default function AddTurfRequest({ embeddedMode = false }) {
                 </div>
 
                 <button type="submit" className="btn-pay" disabled={submitting}>
-                    {submitting ? "Submitting Request…" : "Submit Turf Listing Request →"}
+                    {submitting ? (uploadStatus || "Submitting Request…") : "Submit Turf Listing Request →"}
                 </button>
             </form>
         </>

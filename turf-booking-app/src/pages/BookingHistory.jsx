@@ -6,44 +6,94 @@ import { useBookings } from "../hooks/useBookings";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { formatDate, formatTime } from "../utils/dateUtils";
 import { formatCurrency } from "../utils/formatCurrency";
-import { BOOKING_STATUS } from "../utils/constants";
 import StarRating from "../components/StarRating";
 import { submitReview } from "../services/ratingService";
 
+// ── helpers ──────────────────────────────────────────────────────────────────
+function StatusBadge({ status }) {
+  const map = {
+    upcoming:  { label: "Upcoming",  cls: "badge-upcoming" },
+    completed: { label: "Completed", cls: "badge-completed" },
+    cancelled: { label: "Cancelled", cls: "badge-cancelled" },
+  };
+  const { label, cls } = map[status] || { label: status, cls: "" };
+  return <span className={`bh-status-badge ${cls}`}>{label}</span>;
+}
+
+function EmptyState({ tab }) {
+  return (
+    <div className="bh-empty">
+      <span className="bh-empty-icon">{tab === "upcoming" ? "📅" : "🏟️"}</span>
+      <h3>No {tab === "upcoming" ? "upcoming" : "past"} bookings</h3>
+      <p>
+        {tab === "upcoming"
+          ? "You haven't booked any turf yet. Browse turfs and book your first slot!"
+          : "Completed and cancelled bookings will appear here."}
+      </p>
+      {tab === "upcoming" && (
+        <a href="/turfs" className="btn-primary" style={{ display: "inline-block", marginTop: 12 }}>
+          Browse Turfs →
+        </a>
+      )}
+    </div>
+  );
+}
+
 export default function BookingHistory() {
   const { currentUser } = useAuth();
-  const { bookings, loading, refetch } = useBookings();
+  const { bookings, loading, error, refetch } = useBookings();
   const [tab, setTab] = useState("upcoming");
   const [cancelling, setCancelling] = useState(null);
   const [reviewBooking, setReviewBooking] = useState(null);
   const [reviewData, setReviewData] = useState({ rating: 0, comment: "" });
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
 
-  const upcoming = bookings.filter((b) => b.booking_status === BOOKING_STATUS.UPCOMING);
-  const past = bookings.filter((b) => b.booking_status !== BOOKING_STATUS.UPCOMING);
+  // ── Field normalizer — maps Firebase field names to display values ─────────
+  // Firebase stores: turfName, date, startTime, endTime, amount, status, paymentId
+  function norm(b) {
+    return {
+      id:         b.id,
+      turfName:   b.turfName || b.turf_name || "Unknown Turf",
+      turfId:     b.turfId   || b.turf_id   || "",
+      date:       b.date     || b.booking_date || "",
+      startTime:  b.startTime || b.start_time  || "",
+      endTime:    b.endTime   || b.end_time    || "",
+      amount:     b.amount    || b.total_amount || 0,
+      paymentId:  b.paymentId || b.payment_id  || "",
+      groupId:    b.groupId   || null,
+      status:     b.booking_status || b.status  || "upcoming",
+    };
+  }
+
+  const upcoming = bookings.filter((b) => (b.booking_status || b.status) === "upcoming" || b.booking_status === "upcoming");
+  const past     = bookings.filter((b) => (b.booking_status || b.status) !== "upcoming");
   const displayed = tab === "upcoming" ? upcoming : past;
 
-  async function handleCancel(booking) {
-    if (!window.confirm("Cancel this booking? A refund will be added to your wallet.")) return;
-    setCancelling(booking.id);
+  async function handleCancel(raw) {
+    const b = norm(raw);
+    if (!window.confirm(`Cancel booking at ${b.turfName}? A full refund will be added to your wallet.`)) return;
+    setCancelling(b.id);
     try {
-      const { refundAmount } = await cancelBooking(booking.id, currentUser.uid);
-      alert(`Booking cancelled. ₹${refundAmount} refunded to your wallet.`);
+      const { refundAmount } = await cancelBooking(b.id, currentUser.uid);
+      alert(`Booking cancelled. ${formatCurrency(refundAmount)} refunded to your wallet.`);
       refetch();
     } catch (err) {
-      alert(err.message);
+      alert("Error: " + err.message);
     }
     setCancelling(null);
   }
 
   async function handleReview(e) {
     e.preventDefault();
+    const b = norm(reviewBooking);
+    setReviewSubmitting(true);
     try {
       await submitReview({
-        turfId: reviewBooking.turf_id,
-        userId: currentUser.uid,
-        bookingId: reviewBooking.id,
-        rating: reviewData.rating,
-        comment: reviewData.comment,
+        turfId:    b.turfId,
+        userId:    currentUser.uid,
+        bookingId: b.id,
+        rating:    reviewData.rating,
+        comment:   reviewData.comment,
       });
       setReviewBooking(null);
       setReviewData({ rating: 0, comment: "" });
@@ -51,79 +101,154 @@ export default function BookingHistory() {
     } catch {
       alert("Could not submit review. You may have already reviewed this booking.");
     }
+    setReviewSubmitting(false);
   }
 
-  if (loading) return <LoadingSpinner text="Loading your bookings..." />;
+  // ── Render ────────────────────────────────────────────────────────────────
+  if (loading) return <LoadingSpinner text="Loading your bookings…" />;
 
   return (
-    <div className="page-container">
-      <h1>My Bookings</h1>
-      <div className="tab-bar">
-        <button className={`tab-btn ${tab === "upcoming" ? "active" : ""}`} onClick={() => setTab("upcoming")}>
-          Upcoming ({upcoming.length})
+    <div className="bh-page">
+      {/* Header */}
+      <div className="bh-header">
+        <div>
+          <h1>My Bookings 📋</h1>
+          <p>Your complete booking history — past and upcoming</p>
+        </div>
+        <button className="btn-outline-sm" onClick={refetch}>🔄 Refresh</button>
+      </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="alert alert-error" style={{ marginBottom: 16 }}>
+          ⚠️ Could not load bookings: {error}
+          <button className="btn-outline-sm" style={{ marginLeft: 12 }} onClick={refetch}>Retry</button>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="bh-tabs">
+        <button
+          className={`bh-tab ${tab === "upcoming" ? "active" : ""}`}
+          onClick={() => setTab("upcoming")}
+        >
+          🟢 Upcoming <span className="bh-tab-count">{upcoming.length}</span>
         </button>
-        <button className={`tab-btn ${tab === "past" ? "active" : ""}`} onClick={() => setTab("past")}>
-          Past & Cancelled ({past.length})
+        <button
+          className={`bh-tab ${tab === "past" ? "active" : ""}`}
+          onClick={() => setTab("past")}
+        >
+          🕐 Past & Cancelled <span className="bh-tab-count">{past.length}</span>
         </button>
       </div>
 
+      {/* Booking list */}
       {displayed.length === 0 ? (
-        <div className="empty-state">
-          <p>📅 No {tab} bookings found.</p>
-        </div>
+        <EmptyState tab={tab} />
       ) : (
-        <div className="booking-list">
-          {displayed.map((b) => (
-            <div key={b.id} className={`booking-card status-${b.booking_status}`}>
-              <div className="booking-card-header">
-                <div>
-                  <h3>{b.turf_name || b.turfs?.name}</h3>
-                  <p className="booking-location">📍 {b.turfs?.location}</p>
+        <div className="bh-list">
+          {displayed.map((raw) => {
+            const b = norm(raw);
+            return (
+              <div key={b.id} className={`bh-card bh-card--${b.status}`}>
+                {/* Card header */}
+                <div className="bh-card-top">
+                  <div className="bh-card-turf">
+                    <span className="bh-card-turf-icon">🏟️</span>
+                    <div>
+                      <h3 className="bh-card-turf-name">{b.turfName}</h3>
+                      {b.groupId && (
+                        <span className="bh-group-badge">Multi-slot booking</span>
+                      )}
+                    </div>
+                  </div>
+                  <StatusBadge status={b.status} />
                 </div>
-                <span className={`status-badge ${b.booking_status}`}>{b.booking_status}</span>
+
+                {/* Details grid */}
+                <div className="bh-card-details">
+                  <div className="bh-detail-item">
+                    <span className="bh-detail-label">📅 Date</span>
+                    <span className="bh-detail-value">{b.date ? formatDate(b.date) : "—"}</span>
+                  </div>
+                  <div className="bh-detail-item">
+                    <span className="bh-detail-label">⏰ Time</span>
+                    <span className="bh-detail-value">
+                      {b.startTime && b.endTime
+                        ? `${formatTime(b.startTime)} – ${formatTime(b.endTime)}`
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="bh-detail-item">
+                    <span className="bh-detail-label">💳 Amount Paid</span>
+                    <span className="bh-detail-value bh-amount">{formatCurrency(b.amount)}</span>
+                  </div>
+                  <div className="bh-detail-item">
+                    <span className="bh-detail-label">🧾 Reference</span>
+                    <span className="bh-detail-value bh-ref">
+                      {b.paymentId ? b.paymentId.slice(0, 24) + "…" : "—"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="bh-card-actions">
+                  {b.status === "upcoming" && (
+                    <button
+                      onClick={() => handleCancel(raw)}
+                      disabled={cancelling === b.id}
+                      className="btn-danger-sm"
+                    >
+                      {cancelling === b.id ? "Cancelling…" : "❌ Cancel & Refund"}
+                    </button>
+                  )}
+                  {b.status === "completed" && (
+                    <button
+                      onClick={() => setReviewBooking(raw)}
+                      className="btn-outline-sm"
+                    >
+                      ⭐ Leave Review
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="booking-card-body">
-                <div className="booking-detail"><span>📅 Date</span><strong>{formatDate(b.booking_date)}</strong></div>
-                <div className="booking-detail"><span>⏰ Time</span><strong>{formatTime(b.start_time)} – {formatTime(b.end_time)}</strong></div>
-                <div className="booking-detail"><span>💳 Amount</span><strong>{formatCurrency(b.total_amount)}</strong></div>
-                <div className="booking-detail"><span>🧾 Payment</span><strong>{b.payment_id || "—"}</strong></div>
-              </div>
-              {b.booking_status === BOOKING_STATUS.UPCOMING && (
-                <button
-                  onClick={() => handleCancel(b)}
-                  disabled={cancelling === b.id}
-                  className="btn-danger-sm"
-                >
-                  {cancelling === b.id ? "Cancelling..." : "Cancel Booking"}
-                </button>
-              )}
-              {b.booking_status === BOOKING_STATUS.COMPLETED && (
-                <button onClick={() => setReviewBooking(b)} className="btn-outline-sm">Leave Review</button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
       {/* Review Modal */}
       {reviewBooking && (
         <div className="modal-overlay" onClick={() => setReviewBooking(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Review — {reviewBooking.turf_name}</h3>
+          <div className="modal bh-review-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="bh-review-header">
+              <h3>⭐ Rate Your Experience</h3>
+              <p>{norm(reviewBooking).turfName}</p>
+            </div>
             <form onSubmit={handleReview}>
               <div className="form-group">
-                <label>Your Rating</label>
-                <StarRating rating={reviewData.rating} onRate={(r) => setReviewData({ ...reviewData, rating: r })} />
+                <label>Your Rating *</label>
+                <StarRating
+                  rating={reviewData.rating}
+                  onRate={(r) => setReviewData({ ...reviewData, rating: r })}
+                />
               </div>
               <div className="form-group">
-                <label>Comment (optional)</label>
-                <textarea rows={3} placeholder="How was your experience?"
+                <label>Comment <span style={{ fontWeight: 400, color: "var(--text-secondary)" }}>(optional)</span></label>
+                <textarea
+                  rows={3}
+                  placeholder="How was the turf? Surface quality, lighting, amenities…"
                   value={reviewData.comment}
-                  onChange={(e) => setReviewData({ ...reviewData, comment: e.target.value })} />
+                  onChange={(e) => setReviewData({ ...reviewData, comment: e.target.value })}
+                />
               </div>
               <div className="modal-actions">
-                <button type="button" onClick={() => setReviewBooking(null)} className="btn-outline-sm">Cancel</button>
-                <button type="submit" className="btn-primary" disabled={!reviewData.rating}>Submit Review</button>
+                <button type="button" onClick={() => setReviewBooking(null)} className="btn-outline-sm">
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary" disabled={!reviewData.rating || reviewSubmitting}>
+                  {reviewSubmitting ? "Submitting…" : "Submit Review"}
+                </button>
               </div>
             </form>
           </div>

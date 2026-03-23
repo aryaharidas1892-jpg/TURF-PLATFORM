@@ -18,8 +18,9 @@ const COLLECTION = "available_players";
  * @param {string} userId
  * @param {string} startTime - "HH:MM" (24h), e.g. "10:00"
  * @param {string} endTime   - "HH:MM" (24h), e.g. "12:00"
+ * @param {string[]} sports  - optional list of sports the player is interested in
  */
-export async function setAvailability(userId, startTime, endTime) {
+export async function setAvailability(userId, startTime, endTime, sports = []) {
   const user = auth.currentUser;
   const now = new Date();
 
@@ -45,6 +46,7 @@ export async function setAvailability(userId, startTime, endTime) {
     email: user?.email || "",
     availability_from: Timestamp.fromDate(availabilityFrom),
     availability_until: Timestamp.fromDate(availabilityUntil),
+    sports: sports.length > 0 ? sports : [],
     updated_at: Timestamp.now(),
   });
 }

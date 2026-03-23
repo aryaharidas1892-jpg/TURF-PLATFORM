@@ -1,6 +1,6 @@
 // src/pages/TurfDetail.jsx
 import { useEffect, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { getTurfById } from "../services/turfService";
 import { getTurfReviews } from "../services/ratingService";
 import StarRating from "../components/StarRating";
@@ -17,75 +17,171 @@ export default function TurfDetail() {
   const [turf, setTurf] = useState(null);
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(null);
 
   useEffect(() => {
-    Promise.all([getTurfById(id), getTurfReviews(id)])
+    setLoading(true);
+    setFetchError(null);
+    Promise.all([
+      getTurfById(id).catch((err) => { setFetchError(err.message); return null; }),
+      getTurfReviews(id).catch(() => []),
+    ])
       .then(([t, r]) => { setTurf(t); setReviews(r); })
       .finally(() => setLoading(false));
   }, [id]);
 
   if (loading) return <LoadingSpinner />;
-  if (!turf) return <div className="page-container"><p>Turf not found.</p></div>;
+
+  if (fetchError || !turf) {
+    return (
+      <div className="page-container">
+        <BackButton fallback="/turfs" />
+        <div className="error-state">
+          <span className="error-state-icon">🏟️</span>
+          <h2>Turf Not Available</h2>
+          <p>{fetchError || "This turf could not be loaded. It may have been removed or is pending admin approval."}</p>
+          <button className="btn-primary" onClick={() => navigate("/turfs")}>Browse All Turfs</button>
+        </div>
+      </div>
+    );
+  }
+
+  const price = turf.price_per_slot ?? turf.pricePerHour;
 
   return (
-    <div className="page-container">
-      <BackButton fallback="/turfs" />
-      <img
-        src={turf.image_url || turf.imageUrl || "https://placehold.co/800x300/16a34a/white?text=Turf"}
-        alt={turf.name}
-        className="turf-detail-img"
-      />
-      <div className="turf-detail-body">
-        <div className="turf-detail-info">
-          <h1>{turf.name}</h1>
-          <p className="location-tag">📍 {turf.location}</p>
-          <div className="rating-row">
-            <StarRating rating={turf.avg_rating} readonly />
-            <span>{turf.avg_rating?.toFixed(1)} ({turf.total_reviews} reviews)</span>
+    <div className="turfdetail-page">
+      {/* Hero Banner */}
+      <div className="turfdetail-hero">
+        <img
+          src={turf.image_url || turf.imageUrl || "https://placehold.co/1200x400/16a34a/white?text=⚽+TurfBook"}
+          alt={turf.name}
+          className="turfdetail-hero-img"
+        />
+        <div className="turfdetail-hero-overlay">
+          <div className="turfdetail-hero-content">
+            <BackButton fallback="/turfs" />
+            <div className="turfdetail-badges">
+              {(turf.sports || []).slice(0, 4).map((s) => (
+                <span key={s} className="td-sport-badge">{s}</span>
+              ))}
+            </div>
+            <h1 className="turfdetail-title">{turf.name || turf.turfName}</h1>
+            <p className="turfdetail-location">📍 {turf.location || `${turf.address}, ${turf.city}`}</p>
           </div>
-          <p className="turf-desc">{turf.description}</p>
+        </div>
+      </div>
+
+      <div className="turfdetail-body">
+        {/* Left: details */}
+        <div className="turfdetail-info">
+
+          {/* Price + rating strip */}
+          <div className="td-strip">
+            <div className="td-price-block">
+              <span className="td-price">{formatCurrency(price)}</span>
+              <span className="td-per-slot">/ slot</span>
+            </div>
+            <div className="td-rating-block">
+              <StarRating rating={turf.avg_rating ?? turf.rating ?? 0} readonly />
+              <span className="td-rating-text">
+                {(turf.avg_rating ?? turf.rating ?? 0).toFixed?.(1) ?? "—"} ({turf.total_reviews ?? turf.reviewCount ?? 0} reviews)
+              </span>
+            </div>
+          </div>
+
+          {/* Description */}
+          {turf.description && <p className="td-desc">{turf.description}</p>}
+
+          {/* Hours */}
+          {turf.openingTime && (
+            <div className="td-info-row">
+              <span className="td-info-label">🕐 Hours</span>
+              <span className="td-info-value">{turf.openingTime} – {turf.closingTime}</span>
+            </div>
+          )}
+
+          {/* Sports */}
+          {turf.sports?.length > 0 && (
+            <div className="td-section">
+              <h4 className="td-section-title">⚽ Sports</h4>
+              <div className="td-tags">
+                {turf.sports.map((s) => <span key={s} className="td-tag sport">{s}</span>)}
+              </div>
+            </div>
+          )}
+
+          {/* Amenities */}
           {turf.amenities?.length > 0 && (
-            <div className="amenities">
-              <h4>Amenities</h4>
-              <div className="amenity-tags">
-                {turf.amenities.map((a) => <span key={a} className="tag">{a}</span>)}
+            <div className="td-section">
+              <h4 className="td-section-title">🏗️ Amenities</h4>
+              <div className="td-tags">
+                {turf.amenities.map((a) => <span key={a} className="td-tag">{a}</span>)}
+              </div>
+            </div>
+          )}
+
+          {/* Owner info */}
+          {turf.ownerName && (
+            <div className="td-owner-card">
+              <div className="td-owner-avatar">{turf.ownerName[0]?.toUpperCase()}</div>
+              <div>
+                <div className="td-owner-name">{turf.ownerName}</div>
+                {turf.ownerPhone && <div className="td-owner-phone">📞 {turf.ownerPhone}</div>}
+                {turf.mapsLink && (
+                  <a href={turf.mapsLink} target="_blank" rel="noopener noreferrer" className="td-maps-link">
+                    📌 View on Maps
+                  </a>
+                )}
               </div>
             </div>
           )}
         </div>
-        <div className="turf-booking-panel">
-          <div className="price-panel">
-            <span className="big-price">{formatCurrency(turf.price_per_slot)}</span>
-            <span className="per-slot">per slot</span>
+
+        {/* Right: Booking Panel */}
+        <div className="turfdetail-booking-panel">
+          <div className="td-book-card">
+            <div className="td-book-price">
+              <span>{formatCurrency(price)}</span>
+              <small>per slot</small>
+            </div>
+            <ul className="td-book-checklist">
+              <li>✅ Instant confirmation</li>
+              <li>✅ Easy cancellation with refund</li>
+              <li>✅ Pay from wallet</li>
+            </ul>
+            <button
+              onClick={() => currentUser ? navigate(`/book/${id}`) : navigate("/login")}
+              className="btn-primary w-full td-book-btn"
+            >
+              {currentUser ? "🏟️ Book Now" : "🔑 Login to Book"}
+            </button>
+            {!currentUser && (
+              <p className="td-login-hint">Don't have an account? <a href="/signup">Sign up free →</a></p>
+            )}
           </div>
-          <button
-            onClick={() => currentUser ? navigate(`/book/${id}`) : navigate("/login")}
-            className="btn-primary w-full"
-          >
-            {currentUser ? "Book Now" : "Login to Book"}
-          </button>
         </div>
       </div>
 
-      <section className="reviews-section">
-        <h2>Reviews ({reviews.length})</h2>
+      {/* Reviews */}
+      <div className="turfdetail-reviews">
+        <h2 className="td-reviews-title">Reviews ({reviews.length})</h2>
         {reviews.length === 0 ? (
-          <p className="muted">No reviews yet. Be the first to review!</p>
+          <div className="empty-state"><p>⭐ No reviews yet. Be the first to review!</p></div>
         ) : (
           <div className="review-list">
             {reviews.map((r) => (
               <div key={r.id} className="review-card">
                 <div className="review-header">
-                  <strong>{r.profiles?.full_name || "Player"}</strong>
+                  <strong>{r.profiles?.full_name || r.userName || "Player"}</strong>
                   <StarRating rating={r.rating} readonly size="sm" />
-                  <span className="review-date">{formatDate(r.created_at)}</span>
+                  <span className="review-date">{formatDate(r.created_at || r.createdAt)}</span>
                 </div>
                 {r.comment && <p>{r.comment}</p>}
               </div>
             ))}
           </div>
         )}
-      </section>
+      </div>
     </div>
   );
 }
