@@ -110,19 +110,27 @@ export async function cancelBooking(bookingId, userId) {
   if (data.userId !== userId) throw new Error("Unauthorized");
   if (data.status === "cancelled") throw new Error("Already cancelled");
 
-  await updateDoc(bookingRef, { status: "cancelled", cancelledAt: serverTimestamp() });
+  // ── Compute 80% refund (20% cancellation fee is withheld) ──────────────
+  const refundCoins = data.amount > 0 ? Math.round(data.amount * 0.8) : 0;
+  const cancellationFee = data.amount > 0 ? Math.round(data.amount * 0.2) : 0;
 
-  let refundAmount = 0;
-  if (data.amount > 0) {
-    refundAmount = data.amount;
+  await updateDoc(bookingRef, {
+    status: "cancelled",
+    cancelledAt: serverTimestamp(),
+    refundCoins,
+    cancellationFee,
+    refunded: refundCoins > 0,
+  });
+
+  if (refundCoins > 0) {
     await creditWallet({
       userId,
-      amount: data.amount,
+      amount: refundCoins,
       bookingId,
-      description: `Refund for Booking: ${data.turfName || "Turf"}`
+      description: `80% refund for cancelled booking at ${data.turfName || "Turf"} (₹${cancellationFee} cancellation fee deducted)`,
     });
   }
-  return { refundAmount };
+  return { refundAmount: refundCoins, cancellationFee };
 }
 
 /** Real-time listener for all confirmed bookings for a specific turf (used by Owner Dashboard) */

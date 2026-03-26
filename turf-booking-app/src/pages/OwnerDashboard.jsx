@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { subscribeToOwnerTurfs } from "../services/ownerService";
 import { subscribeToUserRequests } from "../services/turfRequestService";
 import { subscribeToTurfBookings } from "../services/bookingService";
+import { subscribeToBlockedSlots, blockSlotForOffline, unblockSlot } from "../services/slotService";
 import AddTurfRequest from "./AddTurfRequest";
 import LoadingSpinner from "../components/LoadingSpinner";
 
@@ -35,18 +36,61 @@ function generateSlots(opening, closing) {
 
 function isSlotBooked(bookings, dateStr, startMin) {
   return bookings.some((b) => {
-    // b.date is "YYYY-MM-DD"
     if (b.date !== dateStr) return false;
-    // b.startTime is "HH:MM"
     if (!b.startTime) return false;
     const [h, m] = b.startTime.split(":").map(Number);
-    const bookingMin = h * 60 + m;
-    return bookingMin === startMin;
+    return h * 60 + m === startMin;
   });
+}
+
+function isSlotBlocked(blockedSlots, dateStr, startMin) {
+  const fmt = (h, m) => `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  const h = Math.floor(startMin / 60);
+  const m = startMin % 60;
+  const startTime = fmt(h, m);
+  return blockedSlots.some((b) => b.date === dateStr && b.startTime === startTime);
+}
+
+// ── Block Slot Modal ──────────────────────────────────────────────────────────
+function BlockSlotModal({ slot, dateStr, onConfirm, onClose }) {
+  const [note, setNote] = useState("");
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ marginBottom: 8 }}>🟠 Block Slot for Offline Booking</h3>
+        <p style={{ color: "var(--text-secondary)", fontSize: "0.875rem", marginBottom: 16 }}>
+          Marking <strong>{slot.label}</strong> on <strong>{dateStr}</strong> as booked will prevent online users from selecting it.
+        </p>
+        <div className="form-group">
+          <label>Note (optional)</label>
+          <input
+            type="text"
+            placeholder="e.g. Walk-in customer, Phone booking — John"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            autoFocus
+          />
+        </div>
+        <div className="modal-actions">
+          <button className="btn-outline-sm" onClick={onClose}>Cancel</button>
+          <button
+            className="btn-primary"
+            style={{ background: "#f59e0b", borderColor: "#f59e0b" }}
+            onClick={() => onConfirm(note)}
+          >
+            🟠 Block Slot
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function TurfSlotsView({ turf }) {
   const [bookings, setBookings] = useState([]);
+  const [blockedSlots, setBlockedSlots] = useState([]);
+  const [blockTarget, setBlockTarget] = useState(null); // { slot, dateStr }
+  const [toggling, setToggling] = useState(null); // slot id being toggled
   const slots = generateSlots(turf.openingTime || "06:00", turf.closingTime || "22:00");
 
   // Generate next 7 days
@@ -60,51 +104,115 @@ function TurfSlotsView({ turf }) {
   });
 
   useEffect(() => {
-    if (!turf || !turf.id) return;
-    const unsub = subscribeToTurfBookings(turf.id, setBookings);
-    return () => unsub();
+    if (!turf?.id) return;
+    const unsub1 = subscribeToTurfBookings(turf.id, setBookings);
+    const unsub2 = subscribeToBlockedSlots(turf.id, setBlockedSlots);
+    return () => { unsub1(); unsub2(); };
   }, [turf.id]);
 
-  // Aggregate stats
   const totalBookings = bookings.length;
-  // Calculate revenue from these bookings (amount usually comes from turf fee)
   const totalRevenue = bookings.reduce((sum, b) => sum + (Number(b.amount) || 0), 0);
+  const offlineBlocked = blockedSlots.length;
+
+  async function handleBlockConfirm(note) {
+    const { slot, dateStr } = blockTarget;
+    setBlockTarget(null);
+    setToggling(`${dateStr}_${slot.startMin}`);
+    const fmt = (h, m) => `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    const h = Math.floor(slot.startMin / 60), m = slot.startMin % 60;
+    try {
+      await blockSlotForOffline(turf.id, dateStr, fmt(h, m), note);
+    } catch (err) { alert("Failed to block slot: " + err.message); }
+    setToggling(null);
+  }
+
+  async function handleUnblock(slot, dateStr) {
+    setToggling(`${dateStr}_${slot.startMin}`);
+    const fmt = (h, m) => `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    const h = Math.floor(slot.startMin / 60), m = slot.startMin % 60;
+    try {
+      await unblockSlot(turf.id, dateStr, fmt(h, m));
+    } catch (err) { alert("Failed to unblock slot: " + err.message); }
+    setToggling(null);
+  }
+
+  function handleSlotClick(slot, dateStr) {
+    const booked = isSlotBooked(bookings, dateStr, slot.startMin);
+    const blocked = isSlotBlocked(blockedSlots, dateStr, slot.startMin);
+    if (booked) return; // online booking — cannot change
+    if (blocked) {
+      if (window.confirm(`Unblock ${slot.label} on ${dateStr}? This will make it available for online booking.`)) {
+        handleUnblock(slot, dateStr);
+      }
+    } else {
+      setBlockTarget({ slot, dateStr });
+    }
+  }
 
   return (
     <div className="slots-container">
-      <div style={{ display: "flex", gap: "24px", marginBottom: "16px", color: "var(--gray-600)" }}>
-        <div style={{ background: "var(--white)", padding: "10px 16px", borderRadius: "8px", border: "1px solid var(--gray-200)" }}>
-          <span style={{ fontSize: "1.2rem", fontWeight: "700", color: "var(--text-primary)", display: "block" }}>{totalBookings}</span>
-          <span style={{ fontSize: "0.8rem" }}>Total Bookings</span>
+      {/* Stats */}
+      <div style={{ display: "flex", gap: "16px", marginBottom: "16px", flexWrap: "wrap" }}>
+        <div className="owner-stat-mini">
+          <span>{totalBookings}</span><small>Online Bookings</small>
         </div>
-        <div style={{ background: "var(--white)", padding: "10px 16px", borderRadius: "8px", border: "1px solid var(--gray-200)" }}>
-          <span style={{ fontSize: "1.2rem", fontWeight: "700", color: "var(--primary-dark)", display: "block" }}>₹{totalRevenue}</span>
-          <span style={{ fontSize: "0.8rem" }}>Est. Revenue</span>
+        <div className="owner-stat-mini primary">
+          <span>₹{totalRevenue}</span><small>Est. Revenue</small>
+        </div>
+        <div className="owner-stat-mini orange">
+          <span>{offlineBlocked}</span><small>Offline Blocked</small>
         </div>
       </div>
+
+      {/* Legend */}
       <div className="slots-legend">
         <span className="slot-chip available">🟢 Available</span>
-        <span className="slot-chip booked">🔴 Booked</span>
+        <span className="slot-chip booked">🔴 Online Booked</span>
+        <span className="slot-chip offline">🟠 Blocked (Offline)</span>
       </div>
+      <p style={{ fontSize: "0.78rem", color: "var(--text-secondary)", margin: "6px 0 14px" }}>
+        💡 Click <strong>any available slot</strong> to block it for an offline/walk-in customer. Click an 🟠 slot to unblock it.
+      </p>
+
       <div className="slots-scroll">
         {days.map(({ dateStr, label }) => (
           <div key={dateStr} className="slot-day-col">
             <div className="slot-day-header">{label}</div>
             {slots.map((slot) => {
               const booked = isSlotBooked(bookings, dateStr, slot.startMin);
+              const blocked = isSlotBlocked(blockedSlots, dateStr, slot.startMin);
+              const isToggling = toggling === `${dateStr}_${slot.startMin}`;
+              let chipClass = "available";
+              if (booked) chipClass = "booked";
+              else if (blocked) chipClass = "offline";
               return (
                 <div
                   key={slot.startMin}
-                  className={`slot-cell ${booked ? "booked" : "available"}`}
-                  title={booked ? "Booked" : "Available"}
+                  className={`slot-cell ${chipClass} ${!booked ? "clickable" : ""}`}
+                  title={
+                    booked ? "Online booking — cannot change" :
+                    blocked ? "Click to unblock (free up for online booking)" :
+                    "Click to block for offline/walk-in customer"
+                  }
+                  onClick={() => !isToggling && handleSlotClick(slot, dateStr)}
                 >
-                  {slot.label}
+                  {isToggling ? "…" : slot.label}
                 </div>
               );
             })}
           </div>
         ))}
       </div>
+
+      {/* Block Slot Modal */}
+      {blockTarget && (
+        <BlockSlotModal
+          slot={blockTarget.slot}
+          dateStr={blockTarget.dateStr}
+          onConfirm={handleBlockConfirm}
+          onClose={() => setBlockTarget(null)}
+        />
+      )}
     </div>
   );
 }

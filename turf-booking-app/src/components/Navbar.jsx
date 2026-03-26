@@ -38,6 +38,7 @@ export default function Navbar() {
             <>
               <Link to="/turfs" className="nav-link">Browse Turfs</Link>
               <Link to="/players" className="nav-link">Players</Link>
+              <Link to="/map" className="nav-link">🗺️ Map</Link>
               {currentUser ? (
                 <>
                   <Link to="/bookings" className="nav-link">My Bookings</Link>

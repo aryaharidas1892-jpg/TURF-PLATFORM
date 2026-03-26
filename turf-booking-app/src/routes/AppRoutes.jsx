@@ -15,6 +15,7 @@ import WalletPage from "../pages/WalletPage";
 import PlayersList from "../pages/PlayersList";
 import Profile from "../pages/Profile";
 import NotFound from "../pages/NotFound";
+import MapPage from "../pages/MapPage";
 
 // Turf request (users)
 import MyTurfRequests from "../pages/MyTurfRequests";
@@ -37,6 +38,7 @@ export default function AppRoutes() {
       <Route path="/turfs" element={<TurfList />} />
       <Route path="/turfs/:id" element={<TurfDetail />} />
       <Route path="/players" element={<PlayersList />} />
+      <Route path="/map" element={<MapPage />} />
 
       {/* Regular user protected */}
       <Route path="/book/:id"   element={<ProtectedRoute><BookingPage /></ProtectedRoute>} />

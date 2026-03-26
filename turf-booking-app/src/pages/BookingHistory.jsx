@@ -39,50 +39,126 @@ function EmptyState({ tab }) {
   );
 }
 
+// ── Cancel Confirmation Modal ─────────────────────────────────────────────────
+function CancelModal({ booking, onConfirm, onClose, loading }) {
+  const refundCoins = Math.round(booking.amount * 0.8);
+  const fee = Math.round(booking.amount * 0.2);
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal cancel-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="cancel-modal-header">
+          <span className="cancel-modal-icon">🚫</span>
+          <h3>Cancel Booking?</h3>
+          <p className="cancel-modal-subtitle">Please review the cancellation policy below.</p>
+        </div>
+
+        <div className="cancel-booking-info">
+          <div className="cancel-info-row">
+            <span>📅 Date</span>
+            <strong>{formatDate(booking.date)}</strong>
+          </div>
+          <div className="cancel-info-row">
+            <span>🏟️ Turf</span>
+            <strong>{booking.turfName}</strong>
+          </div>
+          <div className="cancel-info-row">
+            <span>💳 Amount Paid</span>
+            <strong>{formatCurrency(booking.amount)}</strong>
+          </div>
+        </div>
+
+        <div className="cancel-refund-box">
+          <div className="cancel-refund-row green">
+            <span>🪙 Wallet Coins Refund (80%)</span>
+            <strong>+{formatCurrency(refundCoins)}</strong>
+          </div>
+          <div className="cancel-refund-row red">
+            <span>❌ Cancellation Fee (20%)</span>
+            <strong>-{formatCurrency(fee)}</strong>
+          </div>
+        </div>
+
+        <p className="cancel-policy-note">
+          ⓘ Refunds are credited as <strong>Wallet Coins</strong> — they cannot be transferred back to your original payment method.
+        </p>
+
+        <div className="modal-actions">
+          <button className="btn-outline-sm" onClick={onClose} disabled={loading}>
+            Keep Booking
+          </button>
+          <button className="btn-danger-sm" onClick={onConfirm} disabled={loading}
+            style={{ padding: "8px 20px" }}
+          >
+            {loading ? "Cancelling…" : `✓ Confirm & Get ${formatCurrency(refundCoins)} Coins`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Coin Credit Animation Toast ───────────────────────────────────────────────
+function CoinToast({ amount, onDone }) {
+  return (
+    <div className="coin-toast" onAnimationEnd={onDone}>
+      <span className="coin-toast-icon">🪙</span>
+      <span className="coin-toast-text">+{formatCurrency(amount)} Coins Added!</span>
+    </div>
+  );
+}
+
 export default function BookingHistory() {
   const { currentUser } = useAuth();
   const { bookings, loading, error, refetch } = useBookings();
   const [tab, setTab] = useState("upcoming");
-  const [cancelling, setCancelling] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null); // booking to cancel
+  const [cancelling, setCancelling] = useState(false);
   const [reviewBooking, setReviewBooking] = useState(null);
   const [reviewData, setReviewData] = useState({ rating: 0, comment: "" });
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [coinToast, setCoinToast] = useState(null); // { amount }
 
-  // ── Field normalizer — maps Firebase field names to display values ─────────
-  // Firebase stores: turfName, date, startTime, endTime, amount, status, paymentId
+  // ── Field normalizer ───────────────────────────────────────────────────────
   function norm(b) {
     return {
-      id:         b.id,
-      turfName:   b.turfName || b.turf_name || "Unknown Turf",
-      turfId:     b.turfId   || b.turf_id   || "",
-      date:       b.date     || b.booking_date || "",
-      startTime:  b.startTime || b.start_time  || "",
-      endTime:    b.endTime   || b.end_time    || "",
-      amount:     b.amount    || b.total_amount || 0,
-      paymentId:  b.paymentId || b.payment_id  || "",
-      groupId:    b.groupId   || null,
-      status:     b.booking_status || b.status  || "upcoming",
+      id:        b.id,
+      turfName:  b.turfName || b.turf_name || "Unknown Turf",
+      turfId:    b.turfId   || b.turf_id   || "",
+      date:      b.date     || b.booking_date || "",
+      startTime: b.startTime || b.start_time  || "",
+      endTime:   b.endTime   || b.end_time    || "",
+      amount:    b.amount    || b.total_amount || 0,
+      paymentId: b.paymentId || b.payment_id  || "",
+      groupId:   b.groupId   || null,
+      status:    b.booking_status || b.status  || "upcoming",
     };
   }
 
-  const upcoming = bookings.filter((b) => (b.booking_status || b.status) === "upcoming" || b.booking_status === "upcoming");
+  const upcoming = bookings.filter((b) => (b.booking_status || b.status) === "upcoming");
   const past     = bookings.filter((b) => (b.booking_status || b.status) !== "upcoming");
   const displayed = tab === "upcoming" ? upcoming : past;
 
-  async function handleCancel(raw) {
-    const b = norm(raw);
-    if (!window.confirm(`Cancel booking at ${b.turfName}? A full refund will be added to your wallet.`)) return;
-    setCancelling(b.id);
+  // ── Open the cancel modal ──────────────────────────────────────────────────
+  function promptCancel(raw) {
+    setCancelTarget(norm(raw));
+  }
+
+  // ── Confirmed cancellation ─────────────────────────────────────────────────
+  async function handleCancel() {
+    if (!cancelTarget) return;
+    setCancelling(true);
     try {
-      const { refundAmount } = await cancelBooking(b.id, currentUser.uid);
-      alert(`Booking cancelled. ${formatCurrency(refundAmount)} refunded to your wallet.`);
+      const { refundAmount } = await cancelBooking(cancelTarget.id, currentUser.uid);
+      setCancelTarget(null);
+      if (refundAmount > 0) setCoinToast({ amount: refundAmount });
       refetch();
     } catch (err) {
       alert("Error: " + err.message);
     }
-    setCancelling(null);
+    setCancelling(false);
   }
 
+  // ── Review ────────────────────────────────────────────────────────────────
   async function handleReview(e) {
     e.preventDefault();
     const b = norm(reviewBooking);
@@ -109,6 +185,11 @@ export default function BookingHistory() {
 
   return (
     <div className="bh-page">
+      {/* Coin credit toast */}
+      {coinToast && (
+        <CoinToast amount={coinToast.amount} onDone={() => setCoinToast(null)} />
+      )}
+
       {/* Header */}
       <div className="bh-header">
         <div>
@@ -128,16 +209,10 @@ export default function BookingHistory() {
 
       {/* Tabs */}
       <div className="bh-tabs">
-        <button
-          className={`bh-tab ${tab === "upcoming" ? "active" : ""}`}
-          onClick={() => setTab("upcoming")}
-        >
+        <button className={`bh-tab ${tab === "upcoming" ? "active" : ""}`} onClick={() => setTab("upcoming")}>
           🟢 Upcoming <span className="bh-tab-count">{upcoming.length}</span>
         </button>
-        <button
-          className={`bh-tab ${tab === "past" ? "active" : ""}`}
-          onClick={() => setTab("past")}
-        >
+        <button className={`bh-tab ${tab === "past" ? "active" : ""}`} onClick={() => setTab("past")}>
           🕐 Past & Cancelled <span className="bh-tab-count">{past.length}</span>
         </button>
       </div>
@@ -151,21 +226,17 @@ export default function BookingHistory() {
             const b = norm(raw);
             return (
               <div key={b.id} className={`bh-card bh-card--${b.status}`}>
-                {/* Card header */}
                 <div className="bh-card-top">
                   <div className="bh-card-turf">
                     <span className="bh-card-turf-icon">🏟️</span>
                     <div>
                       <h3 className="bh-card-turf-name">{b.turfName}</h3>
-                      {b.groupId && (
-                        <span className="bh-group-badge">Multi-slot booking</span>
-                      )}
+                      {b.groupId && <span className="bh-group-badge">Multi-slot booking</span>}
                     </div>
                   </div>
                   <StatusBadge status={b.status} />
                 </div>
 
-                {/* Details grid */}
                 <div className="bh-card-details">
                   <div className="bh-detail-item">
                     <span className="bh-detail-label">📅 Date</span>
@@ -191,22 +262,21 @@ export default function BookingHistory() {
                   </div>
                 </div>
 
-                {/* Actions */}
+                {/* Refund info on cancelled bookings */}
+                {b.status === "cancelled" && raw.refundCoins > 0 && (
+                  <div className="bh-refund-info">
+                    🪙 {formatCurrency(raw.refundCoins)} coins were added to your wallet
+                  </div>
+                )}
+
                 <div className="bh-card-actions">
                   {b.status === "upcoming" && (
-                    <button
-                      onClick={() => handleCancel(raw)}
-                      disabled={cancelling === b.id}
-                      className="btn-danger-sm"
-                    >
-                      {cancelling === b.id ? "Cancelling…" : "❌ Cancel & Refund"}
+                    <button onClick={() => promptCancel(raw)} className="btn-danger-sm">
+                      ❌ Cancel & Refund
                     </button>
                   )}
                   {b.status === "completed" && (
-                    <button
-                      onClick={() => setReviewBooking(raw)}
-                      className="btn-outline-sm"
-                    >
+                    <button onClick={() => setReviewBooking(raw)} className="btn-outline-sm">
                       ⭐ Leave Review
                     </button>
                   )}
@@ -217,7 +287,17 @@ export default function BookingHistory() {
         </div>
       )}
 
-      {/* Review Modal */}
+      {/* ── Cancel Modal ────────────────────────────────────────────────── */}
+      {cancelTarget && (
+        <CancelModal
+          booking={cancelTarget}
+          onConfirm={handleCancel}
+          onClose={() => !cancelling && setCancelTarget(null)}
+          loading={cancelling}
+        />
+      )}
+
+      {/* ── Review Modal ─────────────────────────────────────────────────── */}
       {reviewBooking && (
         <div className="modal-overlay" onClick={() => setReviewBooking(null)}>
           <div className="modal bh-review-modal" onClick={(e) => e.stopPropagation()}>
