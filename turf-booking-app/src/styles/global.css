@@ -5424,3 +5424,180 @@ select.field-error {
 .owner-stat-mini.orange span { color: #c2410c; }
 [data-theme="dark"] .owner-stat-mini.orange span { color: #fb923c; }
 
+
+/* ============================================================
+   LUCIDE ICON UTILS
+   ============================================================ */
+.spin-icon { animation: spin 1s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.owner-form-section-title { display: flex; align-items: center; gap: 8px; }
+.owner-stat-icon-svg { margin-bottom: 4px; opacity: 0.7; }
+.owner-nav-icon { display: inline-flex; }
+
+/* ============================================================
+   PAYMENT DISCLAIMER MODAL
+   ============================================================ */
+.disclaimer-modal {
+  background: var(--bg-card);
+  border-radius: 18px;
+  padding: 0;
+  width: 100%;
+  max-width: 460px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  overflow: hidden;
+  animation: modalSlideUp 0.22s ease;
+}
+
+.disclaimer-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 22px 22px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.disclaimer-icon-wrap {
+  width: 44px; height: 44px;
+  background: var(--primary-light);
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.disclaimer-header h3 { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 2px; }
+.disclaimer-header p  { font-size: 0.82rem; color: var(--text-secondary); margin: 0; }
+.disclaimer-close {
+  margin-left: auto; background: none; border: none; cursor: pointer;
+  color: var(--text-secondary); padding: 4px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+}
+.disclaimer-close:hover { background: var(--gray-100); }
+
+.disclaimer-summary {
+  padding: 16px 22px;
+  background: var(--gray-50);
+  margin: 0 22px;
+  border-radius: 10px;
+  margin-top: 16px;
+}
+[data-theme="dark"] .disclaimer-summary { background: rgba(255,255,255,0.04); }
+
+.disc-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 0; font-size: 0.86rem;
+}
+.disc-label { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
+.disc-row strong { color: var(--text-primary); font-weight: 600; }
+.disc-divider { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
+.disc-total { padding-top: 8px !important; }
+.disc-amount { color: var(--primary) !important; font-size: 1rem !important; }
+
+.disclaimer-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 14px 22px;
+  padding: 12px 14px;
+  background: #fffbeb;
+  border: 1.5px solid #fde68a;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  color: #78350f;
+}
+[data-theme="dark"] .disclaimer-notice {
+  background: rgba(234,179,8,0.08);
+  border-color: rgba(234,179,8,0.3);
+  color: #fcd34d;
+}
+.disclaimer-notice ul { margin: 0; padding-left: 16px; line-height: 1.8; }
+.disclaimer-notice li { margin-bottom: 2px; }
+
+.disclaimer-actions {
+  display: flex; gap: 10px; justify-content: flex-end;
+  padding: 16px 22px;
+  border-top: 1px solid var(--border);
+}
+
+/* ============================================================
+   OWNER CANCEL MODAL
+   ============================================================ */
+.owner-cancel-modal { max-width: 440px; padding: 0; overflow: hidden; border-radius: 16px; }
+.ocm-header {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 20px 20px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.ocm-header-icon {
+  width: 40px; height: 40px; background: #fee2e2; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+[data-theme="dark"] .ocm-header-icon { background: rgba(220,38,38,0.15); }
+.ocm-header h3 { font-size: 1rem; font-weight: 700; color: var(--text-primary); margin: 0 0 2px; }
+.ocm-header p  { font-size: 0.8rem; color: var(--text-secondary); margin: 0; }
+
+.ocm-booking-info { display: grid; gap: 6px; margin: 14px 20px; }
+.ocm-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 0.85rem; color: var(--text-secondary); padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+.ocm-row:last-child { border-bottom: none; }
+.ocm-row strong { color: var(--text-primary); font-weight: 600; margin-left: auto; }
+.ocm-row.refund strong { color: #16a34a; }
+.ocm-row.withheld strong { color: #dc2626; }
+
+.ocm-booking-info ~ .form-group { margin: 0 20px; }
+.ocm-booking-info ~ .atr-disclaimer { margin: 8px 20px 4px; }
+.ocm-booking-info ~ .modal-actions { padding: 12px 20px 16px; border-top: 1px solid var(--border); }
+
+/* ============================================================
+   OWNER BOOKINGS TAB
+   ============================================================ */
+.owner-bookings-tab { display: flex; flex-direction: column; gap: 16px; }
+.obt-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.obt-filter {
+  padding: 8px 12px; border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--bg-card); color: var(--text-primary);
+  font-size: 0.875rem; outline: none;
+}
+.obt-filter:focus { border-color: var(--primary); }
+
+.obt-list { display: flex; flex-direction: column; gap: 10px; }
+.obt-card {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--bg-card);
+  border-radius: 12px; padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  box-shadow: var(--shadow);
+  gap: 12px;
+}
+.obt-card.obt-past { border-left-color: var(--gray-300); opacity: 0.75; }
+.obt-card-left { display: flex; align-items: flex-start; gap: 12px; min-width: 0; flex: 1; }
+.obt-status-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--primary); flex-shrink: 0; margin-top: 5px;
+}
+.obt-past .obt-status-dot { background: var(--gray-300); }
+.obt-turf-name { font-weight: 700; font-size: 0.92rem; color: var(--text-primary); margin-bottom: 4px; }
+.obt-details {
+  display: flex; flex-wrap: wrap; gap: 10px;
+  font-size: 0.78rem; color: var(--text-secondary);
+}
+.obt-details span { display: flex; align-items: center; gap: 4px; }
+.obt-user-ref { font-size: 0.72rem; color: var(--text-secondary); margin-top: 4px; font-family: monospace; }
+.obt-past-label {
+  font-size: 0.72rem; color: var(--text-secondary);
+  background: var(--gray-100); padding: 3px 8px; border-radius: 10px;
+  white-space: nowrap;
+}
+
+.alert-success {
+  background: #dcfce7; color: #15803d;
+  border: 1px solid #bbf7d0; border-radius: 8px;
+  padding: 10px 14px; font-size: 0.85rem;
+  display: flex; align-items: center; gap: 8px;
+}
+[data-theme="dark"] .alert-success {
+  background: rgba(22,163,74,0.12); color: #6ee7a0; border-color: rgba(22,163,74,0.3);
+}

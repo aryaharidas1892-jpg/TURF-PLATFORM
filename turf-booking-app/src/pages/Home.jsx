@@ -62,17 +62,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── Stats ── */}
-      <section className="stats-strip">
-        <div className="stats-strip-inner">
-          {STATS.map((s) => (
-            <div key={s.label} className="stat-item">
-              <span className="stat-item-value">{s.value}</span>
-              <span className="stat-item-label">{s.label}</span>
-            </div>
-          ))}
-        </div>
-      </section>
 
       {/* ── Features ── */}
       <section className="features-v2">

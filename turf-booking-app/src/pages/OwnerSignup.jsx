@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import BackButton from "../components/BackButton";
+import { User, Building2, FileText, CreditCard, ShieldCheck } from "lucide-react";
 
 const EXP_OPTIONS = ["Less than 1 year", "1–3 years", "3–5 years", "5–10 years", "More than 10 years"];
 
@@ -12,6 +13,7 @@ const INITIAL = {
   businessName: "", city: "", address: "",
   yearsExperience: "", description: "",
   gstin: "",
+  upiId: "",   // e.g. name@okhdfcbank
 };
 
 const REQUIRED_FIELDS = ["fullName","email","password","confirm","phone","businessName","city","address","yearsExperience","description"];
@@ -55,6 +57,10 @@ export default function OwnerSignup() {
     if (form.password !== form.confirm) { setError("Passwords do not match."); return false; }
     if (form.password.length < 6) { setError("Password must be at least 6 characters."); return false; }
     if (!/^\d{10}$/.test(form.phone.replace(/\s/g,""))) { setError("Enter a valid 10-digit phone number."); return false; }
+    // UPI validation (optional field)
+    if (form.upiId.trim() && !/^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/.test(form.upiId.trim())) {
+      setError("Invalid UPI ID format. Use format: name@bankname"); return false;
+    }
     setError(""); return true;
   }
 
@@ -107,7 +113,7 @@ export default function OwnerSignup() {
 
           {/* ── Personal Details ───────────────────────────── */}
           <div className="owner-form-section">
-            <h3 className="owner-form-section-title">👤 Personal Details</h3>
+            <h3 className="owner-form-section-title"><User size={16} /> Personal Details</h3>
             <div className="form-row">
               <div className="form-group">
                 <label>Full Name <span className="req-star">*</span></label>
@@ -176,7 +182,7 @@ export default function OwnerSignup() {
 
           {/* ── Business Details ────────────────────────────── */}
           <div className="owner-form-section">
-            <h3 className="owner-form-section-title">🏢 Business Details</h3>
+            <h3 className="owner-form-section-title"><Building2 size={16} /> Business Details</h3>
             <div className="form-row">
               <div className="form-group">
                 <label>Business / Company Name <span className="req-star">*</span></label>
@@ -243,7 +249,7 @@ export default function OwnerSignup() {
 
           {/* ── About ───────────────────────────────────────── */}
           <div className="owner-form-section">
-            <h3 className="owner-form-section-title">📝 About Your Business</h3>
+            <h3 className="owner-form-section-title"><FileText size={16} /> About Your Business</h3>
             <div className="form-group">
               <label>Brief Description <span className="req-star">*</span></label>
               <textarea
@@ -258,8 +264,25 @@ export default function OwnerSignup() {
             </div>
           </div>
 
+          {/* ── Payment / UPI Details ───────────────────────── */}
+          <div className="owner-form-section">
+            <h3 className="owner-form-section-title"><CreditCard size={16} /> Payment Details</h3>
+            <div className="form-group">
+              <label>UPI ID <span className="optional-label">(optional — to receive payments)</span></label>
+              <input
+                type="text"
+                placeholder="e.g. yourname@okhdfcbank or 9876543210@upi"
+                value={form.upiId}
+                onChange={(e) => set("upiId", e.target.value)}
+              />
+              <span style={{ fontSize: "0.78rem", color: "var(--text-secondary)", marginTop: 4, display: "block" }}>
+                Your UPI ID will be used by the platform to transfer turf booking earnings to you.
+              </span>
+            </div>
+          </div>
+
           <div className="atr-disclaimer">
-            <span>🔒</span>
+            <ShieldCheck size={16} style={{ flexShrink: 0, marginTop: 2 }} />
             <p>By registering, you confirm that all details are genuine. Fraudulent registrations will result in a permanent ban.</p>
           </div>
 

@@ -16,40 +16,34 @@ export default function Navbar() {
   if (userRole === "owner" && location.pathname.startsWith("/owner/dashboard")) return null;
 
   return (
-    <nav className="navbar-v2">
-      <div className="navbar-v2-inner">
-        <Link to="/" className="navbar-v2-brand">
-          <span className="navbar-v2-logo">⚽</span>
-          <span>TurfBook</span>
+    <nav className="navbar" role="navigation" aria-label="Main navigation">
+      <div className="navbar-inner">
+        {/* Brand */}
+        <Link to="/" className="navbar-brand" aria-label="TurfBook home">
+          ⚽ TurfBook
         </Link>
 
-        <div className="navbar-v2-links">
+        {/* Links */}
+        <div className="navbar-links">
           {/* Admin */}
           {userRole === "admin" && (
             <>
-              <Link to="/turfs" className="nav-link">Browse Turfs</Link>
-              <Link to="/admin/turf-requests" className="nav-link nav-link-admin">🛠️ Admin Panel</Link>
-              <button onClick={handleLogout} className="nav-btn-outline">Logout</button>
+              <Link to="/turfs" className={`nav-link${location.pathname === "/turfs" ? " active" : ""}`}>Browse Turfs</Link>
+              <Link to="/admin/turf-requests" className="nav-link" style={{ color: "var(--accent)" }}>🛠️ Admin Panel</Link>
             </>
           )}
 
           {/* Regular user or guest */}
           {(userRole === "user" || !currentUser) && (
             <>
-              <Link to="/turfs" className="nav-link">Browse Turfs</Link>
-              <Link to="/players" className="nav-link">Players</Link>
-              <Link to="/map" className="nav-link">🗺️ Map</Link>
-              {currentUser ? (
+              <Link to="/turfs"   className={`nav-link${location.pathname === "/turfs" ? " active" : ""}`}>Browse Turfs</Link>
+              <Link to="/players" className={`nav-link${location.pathname === "/players" ? " active" : ""}`}>Players</Link>
+              <Link to="/map"     className={`nav-link${location.pathname === "/map" ? " active" : ""}`}>🗺️ Map</Link>
+              {currentUser && (
                 <>
-                  <Link to="/bookings" className="nav-link">My Bookings</Link>
-                  <Link to="/wallet" className="nav-link">Wallet</Link>
-                  <Link to="/profile" className="nav-link">Profile</Link>
-                  <button onClick={handleLogout} className="nav-btn-outline">Logout</button>
-                </>
-              ) : (
-                <>
-                  <Link to="/login" className="nav-btn-outline">Login</Link>
-                  <Link to="/signup" className="nav-btn-primary">Sign Up</Link>
+                  <Link to="/bookings" className={`nav-link${location.pathname === "/bookings" ? " active" : ""}`}>My Bookings</Link>
+                  <Link to="/wallet"   className={`nav-link${location.pathname === "/wallet" ? " active" : ""}`}>🪙 Wallet</Link>
+                  <Link to="/profile"  className={`nav-link${location.pathname === "/profile" ? " active" : ""}`}>Profile</Link>
                 </>
               )}
             </>
@@ -57,19 +51,32 @@ export default function Navbar() {
 
           {/* Owner pending */}
           {userRole === "owner_pending" && (
-            <>
-              <span className="nav-pending-badge">🕐 Pending Approval</span>
-              <button onClick={handleLogout} className="nav-btn-outline">Logout</button>
-            </>
+            <span className="nav-link" style={{ color: "var(--accent)", cursor: "default" }}>
+              🕐 Pending Approval
+            </span>
           )}
 
           {/* Owner — outside dashboard */}
           {userRole === "owner" && (
             <>
               <Link to="/turfs" className="nav-link">Browse Turfs</Link>
-              <Link to="/owner/dashboard" className="nav-btn-primary">Dashboard</Link>
-              <button onClick={handleLogout} className="nav-btn-outline">Logout</button>
+              <Link to="/owner/dashboard" className="btn-primary-sm">Dashboard →</Link>
             </>
+          )}
+        </div>
+
+        {/* Actions (right side) */}
+        <div className="navbar-actions">
+          {!currentUser ? (
+            <>
+              <Link to="/login"  className="btn-outline-sm">Login</Link>
+              <Link to="/signup" className="btn-primary-sm">Sign Up</Link>
+            </>
+          ) : (
+            <button onClick={handleLogout} className="btn-outline-sm">Logout</button>
+          )}
+          {userRole === "admin" && currentUser && (
+            <button onClick={handleLogout} className="btn-outline-sm">Logout</button>
           )}
         </div>
       </div>

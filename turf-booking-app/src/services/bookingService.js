@@ -140,8 +140,49 @@ export function subscribeToTurfBookings(turfId, callback) {
     where("turfId", "==", turfId),
     where("status", "==", "confirmed")
   );
-  
   return onSnapshot(q, (snapshot) => {
     callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
   });
+}
+
+/**
+ * Owner cancels a user's booking on their turf.
+ * User receives 80% refund as wallet coins.
+ * @param {string} bookingId
+ * @param {string} ownerId  — must own the turf
+ * @param {string} reason   — cancellation reason shown to user
+ */
+export async function ownerCancelBooking(bookingId, ownerId, reason) {
+  const bookingRef = doc(db, "bookings", bookingId);
+  const snap = await getDoc(bookingRef);
+  if (!snap.exists()) throw new Error("Booking not found.");
+
+  const data = snap.data();
+  if (data.status === "cancelled") throw new Error("Booking is already cancelled.");
+  if (!reason?.trim()) throw new Error("Please provide a cancellation reason.");
+
+  const refundCoins = data.amount > 0 ? Math.round(data.amount * 0.80) : 0;
+  const withheld    = data.amount > 0 ? data.amount - refundCoins : 0;
+
+  // Mark booking cancelled by owner
+  await updateDoc(bookingRef, {
+    status:           "cancelled",
+    cancelledAt:      serverTimestamp(),
+    cancelledBy:      "owner",
+    cancellationReason: reason.trim(),
+    refundCoins,
+    withheld,
+  });
+
+  // Credit 80% back to user wallet
+  if (refundCoins > 0) {
+    await creditWallet({
+      userId:      data.userId,
+      amount:      refundCoins,
+      bookingId,
+      description: `Owner cancelled your booking at ${data.turfName || "Turf"}. Reason: ${reason}. 80% refund applied.`,
+    });
+  }
+
+  return { refundCoins, withheld };
 }
