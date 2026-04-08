@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import { createMultiSlotBooking } from "../services/bookingService";
-import { deductWallet, getWalletBalance } from "../services/walletService";
+import { deductWallet, getBalances } from "../services/walletService";
 import { formatCurrency } from "../utils/formatCurrency";
 import {
   Wallet, ShieldCheck, AlertTriangle, Loader2, ChevronRight,
@@ -34,36 +34,34 @@ export default function RazorpayButton({ slots, turf, date, onSuccess }) {
 
     setLoading(true);
     setError(null);
-    setStep("Checking wallet balance…");
+    setStep("Checking balance…");
 
     try {
-      const balance = await getWalletBalance(currentUser.uid);
-      if (balance < totalAmount) {
+      const { walletBalance, coinBalance, totalBalance } = await getBalances(currentUser.uid);
+      if (totalBalance < totalAmount) {
         setError(
-          `Insufficient wallet balance. You have ${formatCurrency(balance)} but need ${formatCurrency(totalAmount)}. Please top up your wallet.`
+          `Insufficient balance. You have ${formatCurrency(coinBalance)} in Coins + ${formatCurrency(walletBalance)} in Wallet = ${formatCurrency(totalBalance)}, but need ${formatCurrency(totalAmount)}.`
         );
-        setLoading(false);
-        setStep("");
-        return;
+        setLoading(false); setStep(""); return;
       }
 
       setStep("Creating booking…");
       const bookingDate = date || slotArray[0]?.date;
       const result = await createMultiSlotBooking({
-        userId:       currentUser.uid,
-        turfId:       turf.id,
-        turfName:     turf.name || turf.turfName || "",
-        date:         bookingDate,
-        slots:        slotArray,
+        userId: currentUser.uid,
+        turfId: turf.id,
+        turfName: turf.name || turf.turfName || "",
+        date: bookingDate,
+        slots: slotArray,
         pricePerSlot,
-        paymentId:    `wallet_${Date.now()}`,
+        paymentId: `wallet_${Date.now()}`,
       });
 
       setStep("Processing payment…");
       await deductWallet({
-        userId:      currentUser.uid,
-        amount:      totalAmount,
-        bookingId:   result.groupId,
+        userId: currentUser.uid,
+        amount: totalAmount,
+        bookingId: result.groupId,
         description: `Booking ${slotArray.length} slot(s) at ${turf.name || turf.turfName}`,
       });
 

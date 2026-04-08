@@ -125,9 +125,10 @@ export async function cancelBooking(bookingId, userId) {
   if (refundCoins > 0) {
     await creditWallet({
       userId,
-      amount: refundCoins,
+      amount:      refundCoins,
+      balanceType: "coin",           // refunds always go to Coin Balance
       bookingId,
-      description: `80% refund for cancelled booking at ${data.turfName || "Turf"} (₹${cancellationFee} cancellation fee deducted)`,
+      description: `80% coin refund for cancelled booking at ${data.turfName || "Turf"} (₹${cancellationFee} non-refundable cancellation fee)`,
     });
   }
   return { refundAmount: refundCoins, cancellationFee };
@@ -162,25 +163,26 @@ export async function ownerCancelBooking(bookingId, ownerId, reason) {
   if (!reason?.trim()) throw new Error("Please provide a cancellation reason.");
 
   const refundCoins = data.amount > 0 ? Math.round(data.amount * 0.80) : 0;
-  const withheld    = data.amount > 0 ? data.amount - refundCoins : 0;
+  const withheld = data.amount > 0 ? data.amount - refundCoins : 0;
 
   // Mark booking cancelled by owner
   await updateDoc(bookingRef, {
-    status:           "cancelled",
-    cancelledAt:      serverTimestamp(),
-    cancelledBy:      "owner",
+    status: "cancelled",
+    cancelledAt: serverTimestamp(),
+    cancelledBy: "owner",
     cancellationReason: reason.trim(),
     refundCoins,
     withheld,
   });
 
-  // Credit 80% back to user wallet
+  // Credit 80% back to user's Coin Balance
   if (refundCoins > 0) {
     await creditWallet({
       userId:      data.userId,
       amount:      refundCoins,
+      balanceType: "coin",           // owner-cancelled refunds → coins
       bookingId,
-      description: `Owner cancelled your booking at ${data.turfName || "Turf"}. Reason: ${reason}. 80% refund applied.`,
+      description: `Owner cancelled your slot at ${data.turfName || "Turf"}. Reason: ${reason}. 80% refunded as coins.`,
     });
   }
 

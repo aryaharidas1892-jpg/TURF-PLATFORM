@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { subscribeToAllRequests, approveRequest, rejectRequest } from "../services/turfRequestService";
+import { deleteAllTurfs, deleteTurf } from "../services/turfService";
 import { subscribeToAllOwnerRequests, approveOwnerRequest, rejectOwnerRequest } from "../services/ownerService";
 import { subscribeToAllReports, blockUser, dismissReport } from "../services/reportService";
 import LoadingSpinner from "../components/LoadingSpinner";
@@ -157,6 +158,7 @@ function TurfRequestsSection() {
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
+  const [deletingAll, setDeletingAll] = useState(false);
 
   useEffect(() => {
     const unsub = subscribeToAllRequests(
@@ -180,6 +182,27 @@ function TurfRequestsSection() {
     if (!rejectReason.trim()) return;
     setBusy(true);
     try { await rejectRequest(rejectId, rejectReason); showToast("Turf request rejected."); setRejectId(null); setRejectReason(""); }
+    catch (e) { showToast("❌ " + e.message); }
+    setBusy(false);
+  }
+
+  async function handleDeleteAllTurfs() {
+    if (!window.confirm("⚠️ This will permanently delete ALL turfs from the Browse Turfs section. This cannot be undone. Are you sure?")) return;
+    if (!window.confirm("Are you ABSOLUTELY sure? All turfs will be removed from the platform immediately.")) return;
+    setDeletingAll(true);
+    try {
+      const count = await deleteAllTurfs();
+      showToast(`✅ Deleted ${count} turf${count !== 1 ? "s" : ""} successfully.`);
+    } catch (e) {
+      showToast("❌ " + e.message);
+    }
+    setDeletingAll(false);
+  }
+
+  async function handleDeleteTurf(turfId, turfName) {
+    if (!window.confirm(`Delete "${turfName}" from Browse Turfs? This cannot be undone.`)) return;
+    setBusy(true);
+    try { await deleteTurf(turfId); showToast(`✅ "${turfName}" removed from Browse Turfs.`); }
     catch (e) { showToast("❌ " + e.message); }
     setBusy(false);
   }
@@ -214,6 +237,21 @@ function TurfRequestsSection() {
             <span className="admin-summary-label">{t.charAt(0).toUpperCase() + t.slice(1)}</span>
           </div>
         ))}
+      </div>
+
+      {/* Danger Zone: Delete All Turfs */}
+      <div style={{ margin: "0 0 20px", padding: "12px 16px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <div>
+          <strong style={{ color: "#dc2626", fontSize: "0.9rem" }}>⚠️ Danger Zone</strong>
+          <p style={{ fontSize: "0.8rem", color: "#7f1d1d", margin: "2px 0 0" }}>Permanently remove all live turfs from the Browse Turfs section.</p>
+        </div>
+        <button
+          onClick={handleDeleteAllTurfs}
+          disabled={deletingAll}
+          style={{ background: "#dc2626", color: "#fff", border: "none", padding: "8px 16px", borderRadius: 6, fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", opacity: deletingAll ? 0.6 : 1 }}
+        >
+          {deletingAll ? "Deleting..." : "🗑️ Delete All Turfs"}
+        </button>
       </div>
 
       <div className="tab-bar" style={{ marginBottom: 20 }}>
@@ -259,7 +297,15 @@ function TurfRequestsSection() {
                 {(req.sports || []).map(s => <span key={s} className="mtr-chip sport">{s}</span>)}
                 {(req.amenities || []).map(a => <span key={a} className="mtr-chip amenity">{a}</span>)}
               </div>
-              {req.imageUrl && <img src={req.imageUrl} alt={req.turfName} className="admin-req-img" onError={(e) => e.target.style.display = "none"} />}
+              {req.imageUrls && req.imageUrls.length > 0 ? (
+                <div className="admin-req-img-gallery">
+                  {req.imageUrls.map((url, idx) => (
+                    <img key={idx} src={url} alt={`${req.turfName} ${idx + 1}`} className="admin-req-img-thumb" onError={(e) => e.target.style.display = "none"} />
+                  ))}
+                </div>
+              ) : req.imageUrl ? (
+                <img src={req.imageUrl} alt={req.turfName} className="admin-req-img" onError={(e) => e.target.style.display = "none"} />
+              ) : null}
               {req.status === "rejected" && req.rejectionReason && (
                 <div className="mtr-rejection-box" style={{ marginTop: 12 }}>
                   <strong>Reason:</strong><p>{req.rejectionReason}</p>

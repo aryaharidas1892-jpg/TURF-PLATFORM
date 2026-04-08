@@ -18,6 +18,7 @@ export default function TurfDetail() {
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(null);
+  const [activePhoto, setActivePhoto] = useState(0);
 
   useEffect(() => {
     setLoading(true);
@@ -47,13 +48,18 @@ export default function TurfDetail() {
   }
 
   const price = turf.price_per_slot ?? turf.pricePerHour;
+  const photos = turf.imageUrls && turf.imageUrls.length > 0
+    ? turf.imageUrls
+    : turf.imageUrl
+      ? [turf.imageUrl]
+      : ["https://placehold.co/1200x400/16a34a/white?text=⚽+TurfBook"];
 
   return (
     <div className="turfdetail-page">
       {/* Hero Banner */}
       <div className="turfdetail-hero">
         <img
-          src={turf.image_url || turf.imageUrl || "https://placehold.co/1200x400/16a34a/white?text=⚽+TurfBook"}
+          src={photos[activePhoto]}
           alt={turf.name}
           className="turfdetail-hero-img"
         />
@@ -70,6 +76,22 @@ export default function TurfDetail() {
           </div>
         </div>
       </div>
+
+      {/* Photo thumbnail strip (only shown when > 1 photo) */}
+      {photos.length > 1 && (
+        <div className="td-photo-strip">
+          {photos.map((src, idx) => (
+            <button
+              key={idx}
+              className={`td-photo-thumb-btn ${activePhoto === idx ? "active" : ""}`}
+              onClick={() => setActivePhoto(idx)}
+              title={`Photo ${idx + 1}`}
+            >
+              <img src={src} alt={`Turf photo ${idx + 1}`} className="td-photo-thumb" />
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="turfdetail-body">
         {/* Left: details */}

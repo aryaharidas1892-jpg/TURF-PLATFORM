@@ -91,6 +91,7 @@ export async function approveRequest(requestId, requestData) {
         sports: requestData.sports || [],
         amenities: requestData.amenities || [],
         imageUrl: requestData.image_url || requestData.imageUrl || "",
+        imageUrls: requestData.imageUrls || (requestData.imageUrl ? [requestData.imageUrl] : []),
         ownerName: requestData.ownerName,
         ownerPhone: requestData.ownerPhone,
         ownerEmail: requestData.ownerEmail,

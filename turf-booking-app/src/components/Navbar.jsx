@@ -75,9 +75,6 @@ export default function Navbar() {
           ) : (
             <button onClick={handleLogout} className="btn-outline-sm">Logout</button>
           )}
-          {userRole === "admin" && currentUser && (
-            <button onClick={handleLogout} className="btn-outline-sm">Logout</button>
-          )}
         </div>
       </div>
     </nav>

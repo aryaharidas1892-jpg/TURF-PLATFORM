@@ -9,13 +9,16 @@ import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 const SPORTS_LIST = ["Football", "Cricket", "Basketball", "Badminton", "Tennis", "Volleyball", "Hockey", "Kabaddi"];
 const AMENITIES_LIST = ["Parking", "Changing Rooms", "Floodlights", "Washrooms", "Drinking Water", "Cafeteria", "First Aid", "CCTV Security"];
 
+const MAX_IMAGE_SIZE_MB = 5;
+const MAX_IMAGE_COUNT = 5;
+
 const INITIAL = {
     turfName: "", description: "",
     pricePerHour: "",
     address: "", city: "", mapsLink: "",
     openingTime: "06:00", closingTime: "22:00",
     sports: [], amenities: [],
-    imageFile: null, imageUrl: "",
+    imageFiles: [], imagePreviews: [],
     ownerName: "", ownerPhone: "", ownerEmail: "",
 };
 
@@ -68,27 +71,33 @@ export default function AddTurfRequest({ embeddedMode = false }) {
         setSubmitting(true);
         setUploadStatus("");
         try {
-            let imageUrl = "";
+            const imageUrls = [];
 
-            // Upload image only if one was selected
-            if (form.imageFile) {
-                setUploadStatus("Uploading image…");
-                try {
-                    const ext = form.imageFile.name.split(".").pop();
-                    const fileName = `turf_${Date.now()}.${ext}`;
-                    const imageRef = ref(storage, `turf_images/${fileName}`);
-                    imageUrl = await uploadWithTimeout(imageRef, form.imageFile);
-                } catch (uploadErr) {
-                    // Don't block submission if image upload fails
-                    console.warn("Image upload failed:", uploadErr.message);
-                    setUploadStatus("⚠️ Image upload failed — submitting without image.");
-                    imageUrl = "";
+            // Upload each image
+            if (form.imageFiles.length > 0) {
+                for (let i = 0; i < form.imageFiles.length; i++) {
+                    const file = form.imageFiles[i];
+                    setUploadStatus(`Uploading image ${i + 1} of ${form.imageFiles.length}…`);
+                    try {
+                        const ext = file.name.split(".").pop();
+                        const fileName = `turf_${Date.now()}_${i}.${ext}`;
+                        const imageRef = ref(storage, `turf_images/${fileName}`);
+                        const url = await uploadWithTimeout(imageRef, file);
+                        imageUrls.push(url);
+                    } catch (uploadErr) {
+                        console.warn(`Image ${i + 1} upload failed:`, uploadErr.message);
+                        setUploadStatus(`⚠️ Image ${i + 1} upload failed — continuing.`);
+                    }
                 }
             }
 
             setUploadStatus("Submitting request…");
-            const { imageFile, ...restForm } = form;
-            await submitTurfRequest(currentUser, { ...restForm, imageUrl });
+            const { imageFiles, imagePreviews, ...restForm } = form;
+            await submitTurfRequest(currentUser, {
+                ...restForm,
+                imageUrls,
+                imageUrl: imageUrls[0] || "", // backward compat
+            });
             setSubmitted(true);
         } catch (err) {
             setError("Failed to submit: " + err.message);
@@ -209,25 +218,74 @@ export default function AddTurfRequest({ embeddedMode = false }) {
 
                 {/* Media — OPTIONAL */}
                 <div className="atr-section">
-                    <h2 className="atr-section-title">📸 Turf Image <span className="optional-label">(optional)</span></h2>
+                    <h2 className="atr-section-title">📸 Turf Photos <span className="optional-label">(optional)</span></h2>
                     <div className="form-group">
-                        <label>Upload Image <span className="optional-label">(JPEG, PNG, or WebP — skip if upload fails)</span></label>
+                        <label>
+                            Upload Photos
+                            <span className="optional-label"> (JPEG, PNG, or WebP · max {MAX_IMAGE_SIZE_MB}MB each · up to {MAX_IMAGE_COUNT} photos)</span>
+                        </label>
                         <input
                             type="file"
                             accept="image/*"
+                            multiple
                             onChange={(e) => {
-                                const file = e.target.files[0];
-                                if (file) {
-                                    set("imageFile", file);
-                                    set("imageUrl", URL.createObjectURL(file));
+                                const selectedFiles = Array.from(e.target.files);
+                                const validFiles = [];
+                                const rejectedNames = [];
+
+                                selectedFiles.forEach((file) => {
+                                    if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+                                        rejectedNames.push(`${file.name} (exceeds ${MAX_IMAGE_SIZE_MB}MB)`);
+                                    } else {
+                                        validFiles.push(file);
+                                    }
+                                });
+
+                                if (rejectedNames.length > 0) {
+                                    setError(`These files were too large and skipped: ${rejectedNames.join(", ")}`);
+                                } else {
+                                    setError("");
                                 }
+
+                                // Merge with existing, cap at MAX_IMAGE_COUNT
+                                const combined = [...form.imageFiles, ...validFiles].slice(0, MAX_IMAGE_COUNT);
+                                const previews = combined.map((f) => URL.createObjectURL(f));
+                                set("imageFiles", combined);
+                                set("imagePreviews", previews);
+                                // reset input so same files can be re-added after removal
+                                e.target.value = "";
                             }}
                         />
+                        <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: 6 }}>
+                            {form.imageFiles.length}/{MAX_IMAGE_COUNT} photo{form.imageFiles.length !== 1 ? "s" : ""} selected
+                        </p>
                     </div>
-                    {form.imageUrl && (
+
+                    {/* Preview gallery */}
+                    {form.imagePreviews.length > 0 && (
                         <div style={{ marginTop: 12 }}>
-                            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: 4 }}>Image Preview:</p>
-                            <img src={form.imageUrl} alt="Turf preview" className="atr-img-preview" />
+                            <p style={{ fontSize: "0.85rem", color: "var(--text-secondary)", marginBottom: 8 }}>Preview:</p>
+                            <div className="atr-img-gallery">
+                                {form.imagePreviews.map((src, idx) => (
+                                    <div key={idx} className="atr-img-gallery-item">
+                                        <img src={src} alt={`Turf photo ${idx + 1}`} className="atr-img-preview" />
+                                        <button
+                                            type="button"
+                                            className="atr-img-remove-btn"
+                                            onClick={() => {
+                                                const newFiles = form.imageFiles.filter((_, i) => i !== idx);
+                                                const newPreviews = form.imagePreviews.filter((_, i) => i !== idx);
+                                                set("imageFiles", newFiles);
+                                                set("imagePreviews", newPreviews);
+                                            }}
+                                            title="Remove photo"
+                                        >
+                                            ✕
+                                        </button>
+                                        {idx === 0 && <span className="atr-img-primary-badge">Cover</span>}
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>

@@ -6,12 +6,18 @@ import StarRating from "./StarRating";
 export default function TurfCard({ turf }) {
   const price = turf.price_per_slot ?? turf.pricePerHour;
   const sports = turf.sports || [];
+  const photos = turf.imageUrls && turf.imageUrls.length > 0
+    ? turf.imageUrls
+    : turf.imageUrl
+      ? [turf.imageUrl]
+      : [];
+  const coverImg = photos[0] || "https://placehold.co/400x220/16a34a/white?text=⚽+TurfBook";
 
   return (
     <div className="turf-card-v2">
       <div className="turf-card-img-wrap">
         <img
-          src={turf.image_url || turf.imageUrl || "https://placehold.co/400x220/16a34a/white?text=⚽+TurfBook"}
+          src={coverImg}
           alt={turf.name || turf.turfName}
           className="turf-card-img-v2"
         />
@@ -24,6 +30,11 @@ export default function TurfCard({ turf }) {
               <span key={s} className="turf-card-sport-chip">{s}</span>
             ))}
             {sports.length > 2 && <span className="turf-card-sport-chip">+{sports.length - 2}</span>}
+          </div>
+        )}
+        {photos.length > 1 && (
+          <div className="turf-card-photo-count">
+            📷 {photos.length}
           </div>
         )}
       </div>
