@@ -78,6 +78,13 @@ export function subscribeToAllRequests(callback, onError) {
 /** Approve a request: update status and write turf to `turfs` collection */
 export async function approveRequest(requestId, requestData) {
     // Build the turf document from the request data
+    // Normalize image URLs — handle both imageUrls (array) and imageUrl (string) fields
+    const rawUrls = Array.isArray(requestData.imageUrls) && requestData.imageUrls.length > 0
+        ? requestData.imageUrls
+        : (requestData.imageUrl || requestData.image_url)
+            ? [requestData.imageUrl || requestData.image_url]
+            : [];
+
     const turfDoc = {
         name: requestData.turfName,
         description: requestData.description,
@@ -90,8 +97,8 @@ export async function approveRequest(requestId, requestData) {
         closingTime: requestData.closingTime,
         sports: requestData.sports || [],
         amenities: requestData.amenities || [],
-        imageUrl: requestData.image_url || requestData.imageUrl || "",
-        imageUrls: requestData.imageUrls || (requestData.imageUrl ? [requestData.imageUrl] : []),
+        imageUrl: rawUrls[0] || "",
+        imageUrls: rawUrls,
         ownerName: requestData.ownerName,
         ownerPhone: requestData.ownerPhone,
         ownerEmail: requestData.ownerEmail,

@@ -3,8 +3,10 @@ import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { submitTurfRequest } from "../services/turfRequestService";
-import { storage } from "../firebase/firebase";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+
+// Cloudinary config (free image hosting — no paid plan needed)
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
 const SPORTS_LIST = ["Football", "Cricket", "Basketball", "Badminton", "Tennis", "Volleyball", "Hockey", "Kabaddi"];
 const AMENITIES_LIST = ["Parking", "Changing Rooms", "Floodlights", "Washrooms", "Drinking Water", "Cafeteria", "First Aid", "CCTV Security"];
@@ -26,13 +28,25 @@ function toggle(arr, val) {
     return arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val];
 }
 
-/** Upload with a 15-second timeout to prevent infinite hang */
-async function uploadWithTimeout(imageRef, file, timeoutMs = 15000) {
-    const uploadPromise = uploadBytes(imageRef, file).then(() => getDownloadURL(imageRef));
-    const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Image upload timed out. Check Firebase Storage rules.")), timeoutMs)
+/** Upload image to Cloudinary (free tier — no paid plan needed) */
+async function uploadToCloudinary(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+    formData.append("folder", "turf_images");
+
+    const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+        { method: "POST", body: formData }
     );
-    return Promise.race([uploadPromise, timeoutPromise]);
+
+    if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error?.message || `Upload failed (HTTP ${res.status})`);
+    }
+
+    const data = await res.json();
+    return data.secure_url;
 }
 
 export default function AddTurfRequest({ embeddedMode = false }) {
@@ -72,23 +86,38 @@ export default function AddTurfRequest({ embeddedMode = false }) {
         setUploadStatus("");
         try {
             const imageUrls = [];
+            const failedUploads = [];
 
-            // Upload each image
+            // Upload each image to Cloudinary
             if (form.imageFiles.length > 0) {
                 for (let i = 0; i < form.imageFiles.length; i++) {
                     const file = form.imageFiles[i];
                     setUploadStatus(`Uploading image ${i + 1} of ${form.imageFiles.length}…`);
                     try {
-                        const ext = file.name.split(".").pop();
-                        const fileName = `turf_${Date.now()}_${i}.${ext}`;
-                        const imageRef = ref(storage, `turf_images/${fileName}`);
-                        const url = await uploadWithTimeout(imageRef, file);
+                        const url = await uploadToCloudinary(file);
                         imageUrls.push(url);
                     } catch (uploadErr) {
-                        console.warn(`Image ${i + 1} upload failed:`, uploadErr.message);
-                        setUploadStatus(`⚠️ Image ${i + 1} upload failed — continuing.`);
+                        console.error(`Image ${i + 1} upload failed:`, uploadErr.message);
+                        failedUploads.push(file.name);
                     }
                 }
+            }
+
+            // Warn user if images failed but still allow submission
+            if (failedUploads.length > 0 && imageUrls.length === 0 && form.imageFiles.length > 0) {
+                const proceed = window.confirm(
+                    `⚠️ All ${failedUploads.length} image(s) failed to upload.\n\n` +
+                    `Please check your Cloudinary credentials in the .env file.\n\n` +
+                    `Do you still want to submit without images?`
+                );
+                if (!proceed) {
+                    setSubmitting(false);
+                    setUploadStatus("");
+                    setError(`Image upload failed for: ${failedUploads.join(", ")}. Check Cloudinary config in .env file.`);
+                    return;
+                }
+            } else if (failedUploads.length > 0) {
+                setUploadStatus(`⚠️ ${failedUploads.length} image(s) failed, ${imageUrls.length} succeeded. Continuing…`);
             }
 
             setUploadStatus("Submitting request…");

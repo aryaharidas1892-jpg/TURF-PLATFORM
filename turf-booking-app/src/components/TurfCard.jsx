@@ -20,6 +20,7 @@ export default function TurfCard({ turf }) {
           src={coverImg}
           alt={turf.name || turf.turfName}
           className="turf-card-img-v2"
+          onError={(e) => { e.target.onerror = null; e.target.src = "https://placehold.co/400x220/16a34a/white?text=⚽+TurfBook"; }}
         />
         <div className="turf-card-price-badge">
           {formatCurrency(price)}<span>/slot</span>

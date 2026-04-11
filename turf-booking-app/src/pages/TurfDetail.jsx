@@ -62,6 +62,7 @@ export default function TurfDetail() {
           src={photos[activePhoto]}
           alt={turf.name}
           className="turfdetail-hero-img"
+          onError={(e) => { e.target.onerror = null; e.target.src = "https://placehold.co/1200x400/16a34a/white?text=⚽+TurfBook"; }}
         />
         <div className="turfdetail-hero-overlay">
           <div className="turfdetail-hero-content">
