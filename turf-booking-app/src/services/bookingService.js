@@ -12,7 +12,10 @@ import {
   serverTimestamp,
   updateDoc,
   runTransaction,
-  onSnapshot
+  onSnapshot,
+  setDoc,
+  deleteDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { creditWallet } from "./walletService";
 
@@ -41,29 +44,77 @@ export async function createBooking({ userId, turfId, slotId, turfName, date, da
   return { id: docRef.id, ...newBooking };
 }
 
-/** Book multiple consecutive slots in one transaction */
+/**
+ * Book multiple consecutive slots atomically — FIRST-IN-FIRST-SERVED.
+ *
+ * Strategy:
+ *  1. Each bookable slot has a deterministic lock document in `slotLocks`
+ *     with id = `{turfId}_{date}_{startTime}`.
+ *  2. A Firestore `runTransaction` reads every lock doc, verifies none is
+ *     already taken, then writes ALL lock docs + ALL booking docs in one
+ *     atomic batch. If ANY slot is already locked, the whole transaction
+ *     throws and the second user gets a clear error — no slot is double-booked.
+ */
 export async function createMultiSlotBooking({ userId, turfId, turfName, date, slots, pricePerSlot, paymentId }) {
   const groupId = `grp_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  const bookingRef = collection(db, "bookings");
+
+  // Build deterministic lock IDs (same format used by slotService)
+  const lockRefs = slots.map((slot) =>
+    doc(db, "slotLocks", `${turfId}_${date}_${slot.start_time}`)
+  );
+
+  // Pre-create booking document refs so we can set them inside the transaction
+  const bookingRefs = slots.map(() => doc(collection(db, "bookings")));
 
   const bookings = [];
-  for (const slot of slots) {
-    const newBooking = {
-      userId,
-      turfId,
-      turfName: turfName || "",
-      date,
-      startTime: slot.start_time,
-      endTime: slot.end_time,
-      amount: pricePerSlot,
-      paymentId: paymentId || null,
-      groupId,
-      status: "confirmed",
-      createdAt: serverTimestamp(),
-    };
-    const docRef = await addDoc(bookingRef, newBooking);
-    bookings.push({ id: docRef.id, ...newBooking });
-  }
+
+  await runTransaction(db, async (transaction) => {
+    // ── 1. Read all lock docs first (Firestore rule: all reads before writes) ──
+    const lockSnaps = await Promise.all(lockRefs.map((ref) => transaction.get(ref)));
+
+    // ── 2. Check: if ANY slot is already locked, reject immediately ──
+    for (let i = 0; i < lockSnaps.length; i++) {
+      if (lockSnaps[i].exists()) {
+        const takenSlot = slots[i];
+        throw new Error(
+          `Sorry, the slot at ${takenSlot.start_time} on ${date} was just booked by another user. Please choose a different slot.`
+        );
+      }
+    }
+
+    // ── 3. All slots free — write lock docs + booking docs atomically ──
+    const now = serverTimestamp();
+
+    slots.forEach((slot, i) => {
+      // Write the lock doc (prevents concurrent bookings for this slot)
+      transaction.set(lockRefs[i], {
+        userId,
+        turfId,
+        date,
+        startTime: slot.start_time,
+        groupId,
+        lockedAt: now,
+      });
+
+      // Write the booking doc
+      const newBooking = {
+        userId,
+        turfId,
+        turfName: turfName || "",
+        date,
+        startTime: slot.start_time,
+        endTime: slot.end_time,
+        amount: pricePerSlot,
+        paymentId: paymentId || null,
+        groupId,
+        status: "confirmed",
+        createdAt: now,
+      };
+      transaction.set(bookingRefs[i], newBooking);
+      bookings.push({ id: bookingRefs[i].id, ...newBooking });
+    });
+  });
+
   return { groupId, bookings, totalAmount: pricePerSlot * slots.length };
 }
 
@@ -122,6 +173,12 @@ export async function cancelBooking(bookingId, userId) {
     refunded: refundCoins > 0,
   });
 
+  // ── Release the slot lock so the slot is bookable again ──
+  if (data.turfId && data.date && data.startTime) {
+    const lockId = `${data.turfId}_${data.date}_${data.startTime}`;
+    try { await deleteDoc(doc(db, "slotLocks", lockId)); } catch (_) { /* ignore */ }
+  }
+
   if (refundCoins > 0) {
     await creditWallet({
       userId,
@@ -174,6 +231,12 @@ export async function ownerCancelBooking(bookingId, ownerId, reason) {
     refundCoins,
     withheld,
   });
+
+  // ── Release the slot lock so the slot is bookable again ──
+  if (data.turfId && data.date && data.startTime) {
+    const lockId = `${data.turfId}_${data.date}_${data.startTime}`;
+    try { await deleteDoc(doc(db, "slotLocks", lockId)); } catch (_) { /* ignore */ }
+  }
 
   // Credit 80% back to user's Coin Balance
   if (refundCoins > 0) {

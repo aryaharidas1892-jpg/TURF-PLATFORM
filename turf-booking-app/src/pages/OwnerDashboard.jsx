@@ -6,13 +6,15 @@ import { subscribeToOwnerTurfs } from "../services/ownerService";
 import { subscribeToUserRequests } from "../services/turfRequestService";
 import { subscribeToTurfBookings, ownerCancelBooking } from "../services/bookingService";
 import { subscribeToBlockedSlots, blockSlotForOffline, unblockSlot } from "../services/slotService";
+import { deleteTurfCascade } from "../services/turfService";
 import AddTurfRequest from "./AddTurfRequest";
+import EditTurfModal from "../components/EditTurfModal";
 import LoadingSpinner from "../components/LoadingSpinner";
 import {
   LayoutDashboard, Building2, PlusCircle, ClipboardList,
   User, LogOut, Calendar, Clock, DollarSign, Ban,
   CheckCircle2, AlertTriangle, X, ChevronRight, RefreshCw,
-  Wallet, Shield
+  Wallet, Shield, Pencil, Trash2
 } from "lucide-react";
 import { formatCurrency } from "../utils/formatCurrency";
 
@@ -429,10 +431,40 @@ function OverviewTab({ turfs, requests }) {
   );
 }
 
-// ── My Turfs Tab ──────────────────────────────────────────────────────────────
+// ── My Turfs Tab ────────────────────────────────────────────────────────────────────
 function MyTurfsTab({ turfs }) {
   const [selected, setSelected] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [toast, setToast] = useState("");
   const approved = turfs.filter((t) => t.status === "approved");
+
+  function showToast(msg) { setToast(msg); setTimeout(() => setToast(""), 4000); }
+
+  async function handleDelete(turf) {
+    const confirmed = window.confirm(
+      `⚠️ Delete "${turf.turfName || turf.name}"?\n\n` +
+      `This will permanently remove:\n` +
+      `• The turf listing\n` +
+      `• All bookings (future ones get 80% refund)\n` +
+      `• All reviews and blocked slots\n\n` +
+      `This action CANNOT be undone.`
+    );
+    if (!confirmed) return;
+    const doubleConfirm = window.confirm(`Are you absolutely sure you want to delete "${turf.turfName || turf.name}"?`);
+    if (!doubleConfirm) return;
+
+    setDeletingId(turf.id);
+    try {
+      await deleteTurfCascade(turf.id, turf.turfName || turf.name);
+      setSelected(null);
+      showToast(`✅ "${turf.turfName || turf.name}" has been deleted and all data cleaned up.`);
+    } catch (err) {
+      showToast(`❌ Delete failed: ${err.message}`);
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   if (approved.length === 0) {
     return (
@@ -445,29 +477,97 @@ function MyTurfsTab({ turfs }) {
 
   return (
     <div>
+      {toast && <div className="admin-toast" style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999 }}>{toast}</div>}
+
+      {/* Edit modal */}
+      {editTarget && (
+        <EditTurfModal
+          turf={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            showToast(`✅ "${editTarget.name || editTarget.turfName}" updated successfully!`);
+            setEditTarget(null);
+            // If we were viewing slots for this turf, reset so updated data shows
+            if (selected?.id === editTarget.id) setSelected(null);
+          }}
+        />
+      )}
+
       {!selected ? (
         <div className="owner-turf-cards">
-          {approved.map((t) => (
-            <div key={t.id} className="owner-turf-card clickable" onClick={() => setSelected(t)}>
-              {t.imageUrl && <img src={t.imageUrl} alt={t.turfName} className="owner-turf-img" onError={(e) => e.target.style.display = "none"} />}
-              <div className="owner-turf-info">
-                <h4>{t.turfName}</h4>
-                <p>{t.city} · ₹{t.pricePerHour}/hr · {t.openingTime}–{t.closingTime}</p>
-                <div className="mtr-chips" style={{ marginTop: 6 }}>
-                  {(t.sports || []).map(s => <span key={s} className="mtr-chip sport">{s}</span>)}
+          {approved.map((t) => {
+            const isDeleting = deletingId === t.id;
+            const coverImg = (Array.isArray(t.imageUrls) && t.imageUrls.length > 0)
+              ? t.imageUrls[0]
+              : t.imageUrl || null;
+            return (
+              <div key={t.id} className="owner-turf-card" style={{ position: "relative" }}>
+                {coverImg && (
+                  <img
+                    src={coverImg}
+                    alt={t.turfName}
+                    className="owner-turf-img"
+                    onError={(e) => { e.target.style.display = "none"; }}
+                  />
+                )}
+                <div className="owner-turf-info" style={{ flex: 1 }}>
+                  <h4>{t.turfName}</h4>
+                  <p>{t.city} · ₹{t.pricePerHour}/slot · {t.openingTime}–{t.closingTime}</p>
+                  <div className="mtr-chips" style={{ marginTop: 6 }}>
+                    {(t.sports || []).slice(0, 3).map(s => <span key={s} className="mtr-chip sport">{s}</span>)}
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
+                  <button
+                    className="btn-outline-sm"
+                    style={{ display: "flex", alignItems: "center", gap: 5 }}
+                    onClick={() => setSelected(t)}
+                    disabled={isDeleting}
+                  >
+                    View Slots <ChevronRight size={13} />
+                  </button>
+                  <button
+                    className="btn-outline-sm"
+                    style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--accent)", borderColor: "var(--accent)" }}
+                    onClick={() => setEditTarget(t)}
+                    disabled={isDeleting}
+                  >
+                    <Pencil size={13} /> Edit
+                  </button>
+                  <button
+                    className="btn-danger-sm"
+                    style={{ display: "flex", alignItems: "center", gap: 5 }}
+                    onClick={() => handleDelete(t)}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting
+                      ? <><RefreshCw size={13} className="spin" /> Deleting…</>
+                      : <><Trash2 size={13} /> Delete</>
+                    }
+                  </button>
                 </div>
               </div>
-              <span className="owner-turf-view-btn">View Slots <ChevronRight size={14} /></span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div>
-          <button className="btn-outline" onClick={() => setSelected(null)} style={{ marginBottom: 16 }}>
-            ← Back to Turfs
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+            <button className="btn-outline" onClick={() => setSelected(null)}>
+              ← Back to Turfs
+            </button>
+            <button
+              className="btn-outline-sm"
+              style={{ display: "flex", alignItems: "center", gap: 5, color: "var(--accent)", borderColor: "var(--accent)" }}
+              onClick={() => setEditTarget(selected)}
+            >
+              <Pencil size={13} /> Edit This Turf
+            </button>
+          </div>
           <h3 style={{ fontWeight: 800, marginBottom: 4 }}>{selected.turfName}</h3>
-          <p style={{ color: "var(--text-secondary)", marginBottom: 16, fontSize: "0.875rem" }}>{selected.city} · {selected.openingTime}–{selected.closingTime}</p>
+          <p style={{ color: "var(--text-secondary)", marginBottom: 16, fontSize: "0.875rem" }}>
+            {selected.city} · {selected.openingTime}–{selected.closingTime}
+          </p>
           <TurfSlotsView turf={selected} />
         </div>
       )}

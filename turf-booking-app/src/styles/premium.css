@@ -498,14 +498,27 @@ button, input, textarea, select { font-family: var(--font-body); }
 .slot-tile--selected { border-color: var(--primary) !important; background: var(--primary-light) !important; box-shadow: 0 0 0 2px var(--primary) !important; transform: translateY(-2px); }
 .slot-tile--selected::before { content: '✓'; position: absolute; top: 4px; right: 6px; font-size: 0.65rem; font-weight: 800; color: var(--primary); }
 .slot-tile--booked { background: var(--bg-elevated); opacity: 0.6; cursor: not-allowed; }
+.slot-tile--past {
+  background: var(--bg-elevated);
+  border-color: var(--border);
+  opacity: 0.55;
+  cursor: not-allowed;
+  text-decoration: line-through;
+  text-decoration-color: var(--text-muted);
+}
+.slot-tile--past .slot-time { color: var(--text-muted); }
+.slot-tile--past .slot-status-text { color: var(--text-muted); text-decoration: none; }
 .slot-time { font-size: 0.9rem; font-weight: 700; color: var(--text-primary); }
 .slot-end-time { font-size: 0.72rem; color: var(--text-muted); }
 .slot-status-dot { width: 7px; height: 7px; border-radius: 50%; transition: var(--transition); }
 .dot-green { background: var(--primary); box-shadow: 0 0 0 3px rgba(22,163,74,0.2); }
 .dot-red { background: var(--danger); }
+.dot-grey { background: var(--gray-400); }
+.dot-blue { background: #3B82F6; box-shadow: 0 0 0 3px rgba(59,130,246,0.2); }
 .slot-status-text { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
 .slot-tile--selected .slot-time { color: var(--primary-dark); }
 .slot-tile--selected .slot-status-text { color: var(--primary); }
+.slot-legend-item.past { color: var(--text-muted); }
 .slot-empty { text-align: center; padding: 40px 20px; color: var(--text-muted); border: 1.5px dashed var(--border); border-radius: var(--radius); background: var(--bg-elevated); }
 .slot-empty span { font-size: 2rem; display: block; margin-bottom: 8px; }
 

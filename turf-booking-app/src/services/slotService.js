@@ -14,6 +14,17 @@ import {
 } from "firebase/firestore";
 
 /**
+ * Returns today's date as "YYYY-MM-DD" and current local time as "HH:MM".
+ */
+function getNowLocal() {
+  const now = new Date();
+  const date = now.toLocaleDateString("en-CA"); // "YYYY-MM-DD" in local time
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  return { todayDate: date, currentTime: `${hh}:${mm}` };
+}
+
+/**
  * Fetch slots for a turf on a given date (alias for generateSlotsForDate).
  */
 export async function getSlotsByTurfAndDate(turfId, date) {
@@ -39,7 +50,7 @@ export async function generateSlotsForDate(turfId, date) {
   const openingTime = turf.openingTime || "06:00";
   const closingTime = turf.closingTime || "22:00";
 
-  // 2. Fetch all confirmed online bookings for this turf on this date
+  // 2a. Fetch all confirmed online bookings for this turf on this date
   const bookingsQuery = query(
     collection(db, "bookings"),
     where("turfId", "==", turfId),
@@ -48,6 +59,16 @@ export async function generateSlotsForDate(turfId, date) {
   );
   const bookingsSnap = await getDocs(bookingsQuery);
   const bookedStartTimes = new Set(bookingsSnap.docs.map((d) => d.data().startTime));
+
+  // 2b. Also fetch slot locks — these are written atomically before the booking
+  //     document, so they capture in-progress bookings by other users in real time.
+  const locksQuery = query(
+    collection(db, "slotLocks"),
+    where("turfId", "==", turfId),
+    where("date", "==", date)
+  );
+  const locksSnap = await getDocs(locksQuery);
+  locksSnap.docs.forEach((d) => bookedStartTimes.add(d.data().startTime));
 
   // 3. Fetch owner-blocked slots for this turf on this date
   const blockedQuery = query(
@@ -69,6 +90,9 @@ export async function generateSlotsForDate(turfId, date) {
   const closeMin = closeH * 60 + closeM;
 
   // 5. Generate 1-hour slots
+  const { todayDate, currentTime } = getNowLocal();
+  const isToday = date === todayDate;
+
   const slots = [];
   for (let cur = openMin; cur + 60 <= closeMin; cur += 60) {
     const startH = Math.floor(cur / 60);
@@ -83,14 +107,18 @@ export async function generateSlotsForDate(turfId, date) {
     const isOnlineBooked = bookedStartTimes.has(start_time);
     const isOwnerBlocked = !!blockedMap[start_time];
 
+    // A slot is "past" only when viewing today and the start time has already passed
+    const isPast = isToday && start_time <= currentTime;
+
     slots.push({
       id: `${turfId}_${date}_${start_time}`,
       date,
       start_time,
       end_time,
-      booked: isOnlineBooked || isOwnerBlocked, // either source means unavailable to bookers
+      booked: isOnlineBooked || isOwnerBlocked,
       blockedByOwner: isOwnerBlocked,
       offlineNote: isOwnerBlocked ? blockedMap[start_time].note : "",
+      isPast,
     });
   }
 

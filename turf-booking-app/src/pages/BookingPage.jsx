@@ -132,11 +132,12 @@ export default function BookingPage() {
   }
 
   // ── Helpers for slot grid rendering ──────────────────────────────────────
-  const bookedCount = slots.filter((s) => s.booked || s.is_booked).length;
-  const availableCount = slots.length - bookedCount;
+  const pastCount      = slots.filter((s) => s.isPast && !(s.booked || s.is_booked)).length;
+  const bookedCount    = slots.filter((s) => s.booked || s.is_booked).length;
+  const availableCount = slots.length - bookedCount - pastCount;
 
   function handleSlotClick(slot) {
-    if (slot.booked || slot.is_booked) return;
+    if (slot.booked || slot.is_booked || slot.isPast) return;
     setSelectedSlots((prev) => toggleSlot(prev, slot));
   }
 
@@ -185,6 +186,9 @@ export default function BookingPage() {
             <span className="slot-legend-item available">🟢 Available ({availableCount})</span>
             <span className="slot-legend-item booked">🔴 Booked ({bookedCount})</span>
             <span className="slot-legend-item selected">🔵 Selected ({selectedSlots.length})</span>
+            {pastCount > 0 && (
+              <span className="slot-legend-item past">⬛ Expired ({pastCount})</span>
+            )}
           </div>
 
           {/* Slot grid */}
@@ -202,22 +206,44 @@ export default function BookingPage() {
             ) : (
               <div className="slot-grid-new">
                 {slots.map((slot) => {
-                  const isBooked = slot.booked || slot.is_booked;
+                  const isBooked   = slot.booked || slot.is_booked;
+                  const isPast     = slot.isPast && !isBooked; // expired but not already booked
                   const isSelected = selectedSlots.some((s) => s.id === slot.id);
+
+                  // Determine tile class
+                  let tileClass = "slot-tile--available";
+                  if (isBooked)       tileClass = "slot-tile--booked";
+                  else if (isPast)    tileClass = "slot-tile--past";
+                  if (isSelected)     tileClass += " slot-tile--selected";
+
+                  // Determine dot colour
+                  let dotClass = "dot-green";
+                  if (isBooked)    dotClass = "dot-red";
+                  else if (isPast) dotClass = "dot-grey";
+                  else if (isSelected) dotClass = "dot-blue";
+
+                  // Status label
+                  let statusLabel = "Available";
+                  if (isBooked)    statusLabel = "Booked";
+                  else if (isPast) statusLabel = "Expired";
+                  else if (isSelected) statusLabel = "✓ Selected";
+
                   return (
                     <button
                       key={slot.id}
-                      className={`slot-tile ${isBooked ? "slot-tile--booked" : "slot-tile--available"} ${isSelected ? "slot-tile--selected" : ""}`}
-                      disabled={isBooked}
+                      className={`slot-tile ${tileClass}`}
+                      disabled={isBooked || isPast}
                       onClick={() => handleSlotClick(slot)}
-                      title={isBooked ? "Already booked" : `Tap to ${isSelected ? "deselect" : "select"} this slot`}
+                      title={
+                        isBooked ? "Already booked" :
+                        isPast   ? "This time slot has already passed" :
+                        `Tap to ${isSelected ? "deselect" : "select"} this slot`
+                      }
                     >
                       <span className="slot-time">{formatTime(slot.start_time)}</span>
                       <span className="slot-end-time">to {formatTime(slot.end_time)}</span>
-                      <span className={`slot-status-dot ${isBooked ? "dot-red" : isSelected ? "dot-blue" : "dot-green"}`} />
-                      <span className="slot-status-text">
-                        {isBooked ? "Booked" : isSelected ? "✓ Selected" : "Available"}
-                      </span>
+                      <span className={`slot-status-dot ${dotClass}`} />
+                      <span className="slot-status-text">{statusLabel}</span>
                     </button>
                   );
                 })}
